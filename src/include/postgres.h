@@ -109,6 +109,10 @@
 #define GC_FDW "gc_fdw"
 #endif
 
+#ifndef ICEBERG_FDW
+#define ICEBERG_FDW "iceberg_fdw"
+#endif
+
 #include "securec.h"
 #include "securec_check.h"
 

@@ -1057,6 +1057,8 @@ ServerTypeOption getServerType(Oid foreignTableId)
         srvType = T_TXT_CSV_OBS_SERVER;
     } else if (IsSpecifiedFDWFromRelid(foreignTableId, GC_FDW)) {
         srvType = T_PGFDW_SERVER;
+    } else if (IsSpecifiedFDWFromRelid(foreignTableId, ICEBERG_FDW)) {
+        srvType = T_ICEBERG_SERVER;
     }
 
     /* for in-place upgrade */
