@@ -35,6 +35,8 @@
 
 #include "../utils/pg_builtin_proc.h"
 
+extern Datum register_delta_mapping(PG_FUNCTION_ARGS);
+
 static_assert(sizeof(true) == sizeof(char), "illegal bool size");
 static_assert(sizeof(false) == sizeof(char), "illegal bool size");
 
