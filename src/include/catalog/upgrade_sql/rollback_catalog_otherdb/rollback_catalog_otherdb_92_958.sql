@@ -1,0 +1,130 @@
+DROP FUNCTION IF EXISTS pg_catalog.ondemand_recovery_status() CASCADE;
+SET LOCAL inplace_upgrade_next_system_object_oids=IUO_PROC, 6991;
+CREATE FUNCTION pg_catalog.ondemand_recovery_status(
+    out primary_checkpoint_redo_lsn text,
+    out realtime_build_replayed_lsn text,
+    out hashmap_used_blocks         oid,
+    out hashmap_total_blocks        oid,
+    out trxn_queue_blocks           oid,
+    out seg_queue_blocks            oid,
+    out in_ondemand_recovery        boolean,
+    out ondemand_recovery_status    text,
+    out realtime_build_status       text,
+    out recovery_pause_status       text,
+    out record_item_num             oid,
+    out record_item_mbytes          oid
+)
+RETURNS SETOF record LANGUAGE INTERNAL as 'ondemand_recovery_status' stable;
+
+DROP FUNCTION IF EXISTS pg_catalog.pg_buffercache_pages() CASCADE;
+SET LOCAL inplace_upgrade_next_system_object_oids = IUO_PROC, 4130;
+CREATE FUNCTION pg_catalog.pg_buffercache_pages
+(
+    OUT bufferid integer,
+	OUT relfilenode oid,
+	OUT bucketid integer,
+	OUT storage_type bigint,
+	OUT reltablespace oid,
+	OUT reldatabase oid,
+	OUT relforknumber integer,
+	OUT relblocknumber oid,
+	OUT isdirty boolean,
+	OUT isvalid boolean,
+	OUT usage_count smallint,
+	OUT pinning_backends integer
+)
+ RETURNS SETOF record
+ LANGUAGE internal
+ STABLE NOT FENCED NOT SHIPPABLE ROWS 100
+AS $function$pg_buffercache_pages$function$;
+
+-- drop reform info functions
+DROP FUNCTION IF EXISTS pg_catalog.query_node_reform_info_from_dms() CASCADE;
+SET LOCAL inplace_upgrade_next_system_object_oids=IUO_PROC, 2869;
+CREATE FUNCTION pg_catalog.query_node_reform_info_from_dms
+(
+    int4,
+    out name text,
+    out description text
+)
+RETURNS SETOF record LANGUAGE INTERNAL as 'query_node_reform_info_from_dms';
+
+-- drop drc info functions
+DROP FUNCTION IF EXISTS pg_catalog.query_all_drc_info() CASCADE;
+SET LOCAL inplace_upgrade_next_system_object_oids=IUO_PROC, 2870;
+CREATE FUNCTION pg_catalog.query_all_drc_info
+(
+    int4,
+    out RESOURCE_ID text,
+    out MASTER_ID int4,
+    out COPY_INSTS int8,
+    out CLAIMED_OWNER int4,
+    out LOCK_MODE int4,
+    out LAST_EDP int4,
+    out TYPE int4,
+    out IN_RECOVERY char,
+    out COPY_PROMOTE int4,
+    out PART_ID int4,
+    out EDP_MAP int8,
+    out LSN int8,
+    out LEN int4,
+    out RECOVERY_SKIP int4,
+    out RECYCLING char,
+    out CONVERTING_INST_ID int4,
+    out CONVERTING_CURR_MODE int4,
+    out CONVERTING_REQ_MODE int4
+)
+RETURNS SETOF record LANGUAGE INTERNAL as 'query_all_drc_info';
+
+DROP FUNCTION IF EXISTS pg_catalog.gs_get_preparse_location() CASCADE;
+SET LOCAL inplace_upgrade_next_system_object_oids = IUO_PROC, 2874;
+CREATE OR REPLACE FUNCTION pg_catalog.gs_get_preparse_location(
+    OUT preparse_start_location text, 
+    OUT preparse_end_location text, 
+    OUT last_valid_record text
+) RETURNS SETOF record LANGUAGE INTERNAL as 'gs_get_preparse_location' stable;
+
+comment on function pg_catalog.gs_get_preparse_location() is 'statistics: information about WAL locations';
+
+DROP FUNCTION IF EXISTS pg_catalog.pg_prepared_statement() CASCADE;
+DROP FUNCTION IF EXISTS pg_catalog.pg_prepared_statement(bigint) CASCADE;
+
+SET LOCAL inplace_upgrade_next_system_object_oids = IUO_PROC, 2510;
+CREATE OR REPLACE FUNCTION pg_catalog.pg_prepared_statement(
+    OUT name text, 
+    OUT statement text, 
+    OUT prepare_time timestamp with time zone,
+    OUT parameter_types regtype[], 
+    OUT from_sql boolean
+) RETURNS SETOF record LANGUAGE INTERNAL as 'pg_prepared_statement' stable;
+
+SET LOCAL inplace_upgrade_next_system_object_oids = IUO_PROC, 3702;
+CREATE OR REPLACE FUNCTION pg_catalog.pg_prepared_statement(
+    in_sessionid bigint, 
+    OUT sessionid bigint, 
+    OUT username text, OUT name text, 
+    OUT statement text, 
+    OUT prepare_time timestamp with time zone, 
+    OUT parameter_types regtype[], 
+    OUT from_sql boolean
+) RETURNS SETOF record LANGUAGE INTERNAL as 'pg_prepared_statement' stable;
+
+comment on function pg_catalog.pg_prepared_statement() is 'get the prepared statements for this session';
+comment on function pg_catalog.pg_prepared_statement(bigint) is 'get the prepared statements for specified session';
+
+SET LOCAL inplace_upgrade_next_system_object_oids = IUO_PROC, 8889;
+DROP FUNCTION IF EXISTS pg_catalog.ss_txnstatus_cache_stat() CASCADE;
+CREATE OR REPLACE FUNCTION pg_catalog.ss_txnstatus_cache_stat(
+    OUT vcache_gets bigint,
+    OUT hcache_gets bigint,
+    OUT nio_gets bigint,
+    OUT avg_hcache_gettime_us double precision,
+    OUT avg_nio_gettime_us double precision,
+    OUT cache_hit_rate double precision,
+    OUT hcache_eviction bigint,
+    OUT avg_eviction_refcnt double precision
+)
+ RETURNS SETOF record
+ LANGUAGE internal
+ STRICT NOT FENCED NOT SHIPPABLE
+AS $function$ss_txnstatus_cache_stat$function$;

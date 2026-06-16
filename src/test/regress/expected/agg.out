@@ -1,0 +1,561 @@
+create schema aggregate;
+set current_schema='aggregate';
+create table t1 (a int , b int);
+insert into t1 values(1,2);
+explain (costs off)
+select count(*) from (
+  select row_number() over(partition by a, b) as rn,
+      first_value(a) over(partition by b, a) as fv,
+      * from t1
+  )
+where rn = 1;
+                      QUERY PLAN                      
+------------------------------------------------------
+ Aggregate
+   ->  Subquery Scan on __unnamed_subquery__
+         Filter: (__unnamed_subquery__.rn = 1)
+         ->  WindowAgg
+               ->  Sort
+                     Sort Key: t1.b, t1.a
+                     ->  WindowAgg
+                           ->  Sort
+                                 Sort Key: t1.a, t1.b
+                                 ->  Seq Scan on t1
+(10 rows)
+
+set qrw_inlist2join_optmode = 'disable';
+explain  (costs off)
+select count(*) from (
+  select row_number() over(partition by a, b) as rn,
+      first_value(a) over(partition by b, a) as fv,
+      * from t1
+  )
+where rn = 1;
+                  QUERY PLAN                   
+-----------------------------------------------
+ Aggregate
+   ->  Subquery Scan on __unnamed_subquery__
+         Filter: (__unnamed_subquery__.rn = 1)
+         ->  WindowAgg
+               ->  Sort
+                     Sort Key: t1.a, t1.b
+                     ->  Seq Scan on t1
+(7 rows)
+
+reset qrw_inlist2join_optmode;
+set enable_hashagg = off;
+--force hash agg, if used sort agg will report error.
+select a , count(distinct  generate_series(1,2)) from t1 group by a;
+ERROR:  aggregate function calls cannot contain set-returning function calls
+LINE 1: select a , count(distinct  generate_series(1,2)) from t1 gro...
+                                   ^
+CONTEXT:  referenced column: count
+explain (verbose, costs off)
+select a , count(distinct  generate_series(1,2)) from t1 group by a;
+ERROR:  aggregate function calls cannot contain set-returning function calls
+LINE 2: select a , count(distinct  generate_series(1,2)) from t1 gro...
+                                   ^
+CONTEXT:  referenced column: count
+set query_dop = 2;
+select a , count(distinct  generate_series(1,2)) from t1 group by a;
+ERROR:  aggregate function calls cannot contain set-returning function calls
+LINE 1: select a , count(distinct  generate_series(1,2)) from t1 gro...
+                                   ^
+CONTEXT:  referenced column: count
+reset query_dop;
+--test const-false agg
+CREATE TABLE bmsql_item (
+i_id int4 NoT NULL,i_name varchar(24),i_price numeric(5,2),i_data varchar( 50),i_im_id int4,
+coNSTRAINT bmsql_item_pkey PRIMARY KEY (i_id)
+);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "bmsql_item_pkey" for table "bmsql_item"
+insert into bmsql_item values ('1','sqltest_varchar_1','0.01','sqltest_varchar_1','1');
+insert into bmsql_item values ('2','sqltest_varchar_2','0.02','sqltest_varchar_2','2');
+insert into bmsql_item values ('3','sqltest_varchar_3','0.03','sqltest_varchar_3','3');
+insert into bmsql_item values ('4','sqltest_varchar_4','0.04','sqltest_varchar_4','4');
+insert into bmsql_item values ('5');
+CREATE TABLE bmsql_new_order (
+no_w_id int4 NOT NULL,
+no_d_id int4 NOT NULL,no_o_id int4 NOT NULL
+);
+insert into bmsql_new_order values('1','1','1');
+insert into bmsql_new_order values('2','2','2');
+insert into bmsql_new_order values('3','3','3');
+insert into bmsql_new_order values('4','4','4');
+insert into bmsql_new_order values('5','5','5');
+SELECT
+   (avg(alias24.alias17)>2) AS alias32
+FROM
+    bmsql_item,
+    (
+        SELECT alias12.alias5 AS alias17
+		FROM ( SELECT sin(bmsql_new_order.no_o_id)alias5 FROM bmsql_new_order )alias12
+	)alias24
+	GROUP BY bmsql_item.i_im_id HAVING 1>2
+UNION
+SELECT TRUE FROM  bmsql_item;
+ alias32 
+---------
+ t
+(1 row)
+
+explain (verbose,costs off)
+SELECT
+   (avg(alias24.alias17)>2) AS alias32
+FROM
+    bmsql_item,
+    (
+        SELECT alias12.alias5 AS alias17
+		FROM ( SELECT sin(bmsql_new_order.no_o_id)alias5 FROM bmsql_new_order )alias12
+	)alias24
+	GROUP BY bmsql_item.i_im_id HAVING 1>2
+UNION
+SELECT TRUE FROM  bmsql_item;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Unique
+   Output: (NULL::boolean)
+   ->  Sort
+         Output: (NULL::boolean)
+         Sort Key: (NULL::boolean)
+         ->  Append
+               ->  Subquery Scan on "*SELECT* 1"
+                     Output: NULL::boolean
+                     ->  Result
+                           Output: NULL::boolean, aggregate.bmsql_item.i_im_id
+                           One-Time Filter: false
+               ->  Seq Scan on aggregate.bmsql_item
+                     Output: true
+(13 rows)
+
+create table test_agg_false(a int, b varchar(20),c text, d numeric(5,2));
+explain (verbose ,costs off) select sum(a),sum(b) , d from test_agg_false where 0=1 group by d;
+                 QUERY PLAN                 
+--------------------------------------------
+ Result
+   Output: NULL::bigint, NULL::numeric, d
+   One-Time Filter: false
+   ->  Seq Scan on aggregate.test_agg_false
+         Output: a, b, c, d
+(5 rows)
+
+select sum(a),sum(b) , d from test_agg_false where 0=1 group by d;
+ sum | sum | d 
+-----+-----+---
+(0 rows)
+
+explain (verbose, costs off) select sum(a)+sum(b) , d from test_agg_false where 0=1 group by d;
+                 QUERY PLAN                 
+--------------------------------------------
+ Result
+   Output: NULL::numeric, d
+   One-Time Filter: false
+   ->  Seq Scan on aggregate.test_agg_false
+         Output: a, b, c, d
+(5 rows)
+
+select sum(a)+sum(b) , d from test_agg_false where 0=1 group by d;
+ ?column? | d 
+----------+---
+(0 rows)
+
+explain (verbose, costs off) select sin(sum(a)+sum(b)) , d from test_agg_false where 0=1 group by d;
+                 QUERY PLAN                 
+--------------------------------------------
+ Result
+   Output: NULL::double precision, d
+   One-Time Filter: false
+   ->  Seq Scan on aggregate.test_agg_false
+         Output: a, b, c, d
+(5 rows)
+
+select sin(sum(a)+sum(b)) , d from test_agg_false where 0=1 group by d;
+ sin | d 
+-----+---
+(0 rows)
+
+explain (verbose ,costs off) select sum(a)+sum(b) , d , 1 from test_agg_false where 0=1 group by d;
+                 QUERY PLAN                 
+--------------------------------------------
+ Result
+   Output: NULL::numeric, d, 1
+   One-Time Filter: false
+   ->  Seq Scan on aggregate.test_agg_false
+         Output: a, b, c, d
+(5 rows)
+
+select sum(a)+sum(b) , d ,1 from test_agg_false where 0=1 group by d;
+ ?column? | d | ?column? 
+----------+---+----------
+(0 rows)
+
+CREATE TABLE test_table (column_x double precision , column_y double precision);
+INSERT INTO test_table (column_x, column_y) VALUES (55, 38);
+INSERT INTO test_table (column_x, column_y) VALUES (46, 29);
+INSERT INTO test_table (column_x, column_y) VALUES (41, 24);
+INSERT INTO test_table (column_x, column_y) VALUES (48, 33);
+INSERT INTO test_table (column_x, column_y) VALUES (51, 39);
+INSERT INTO test_table (column_x, column_y) VALUES (49, 32);
+SELECT corr_s(column_x, column_y) FROM test_table;
+      corr_s      
+------------------
+ .885714285714286
+(1 row)
+
+SELECT corr_s(column_x, column_y, 'COEFFICIENT') FROM test_table;
+      corr_s      
+------------------
+ .885714285714286
+(1 row)
+
+SELECT corr_s(column_x, column_y, 'ONE_SIDED_SIG') FROM test_table;
+       corr_s       
+--------------------
+ .00942274052478131
+(1 row)
+
+SELECT corr_s(column_x, column_y, 'ONE_SIDED_SIG_POS') FROM test_table;
+       corr_s       
+--------------------
+ .00942274052478131
+(1 row)
+
+SELECT corr_s(column_x, column_y, 'ONE_SIDED_SIG_NEG') FROM test_table;
+      corr_s      
+------------------
+ .990577259475219
+(1 row)
+
+SELECT corr_s(column_x, column_y, 'TWO_SIDED_SIG') FROM test_table;
+      corr_s       
+-------------------
+ .0188454810495626
+(1 row)
+
+SELECT corr_k(column_x, column_y) FROM test_table;
+      corr_k      
+------------------
+ .733333333333333
+(1 row)
+
+SELECT corr_k(column_x, column_y, 'COEFFICIENT') FROM test_table;
+      corr_k      
+------------------
+ .733333333333333
+(1 row)
+
+SELECT corr_k(column_x, column_y, 'ONE_SIDED_SIG') FROM test_table;
+      corr_k       
+-------------------
+ .0193887521961533
+(1 row)
+
+SELECT corr_k(column_x, column_y, 'ONE_SIDED_SIG_POS') FROM test_table;
+      corr_k       
+-------------------
+ .0193887521961533
+(1 row)
+
+SELECT corr_k(column_x, column_y, 'ONE_SIDED_SIG_NEG') FROM test_table;
+      corr_k      
+------------------
+ .980611247803847
+(1 row)
+
+SELECT corr_k(column_x, column_y, 'TWO_SIDED_SIG') FROM test_table;
+      corr_k       
+-------------------
+ .0387775043923066
+(1 row)
+
+CREATE TABLE null_table1 (column_x double precision, column_y double precision);
+INSERT INTO null_table1 (column_x, column_y) VALUES (null, null);
+INSERT INTO null_table1 (column_x, column_y) VALUES (null, null);
+SELECT corr_s(column_x, column_y, 'COEFFICIENT') FROM null_table1;
+ corr_s 
+--------
+       
+(1 row)
+
+CREATE TABLE null_table2 (column_x double precision, column_y double precision);
+INSERT INTO null_table2(column_x, column_y) VALUES (null, 38);
+INSERT INTO null_table2(column_x, column_y) VALUES (null, 29);
+SELECT corr_s(column_x, column_y, 'COEFFICIENT') FROM null_table2;
+ corr_s 
+--------
+       
+(1 row)
+
+CREATE TABLE null_table3 (column_x double precision, column_y double precision);
+INSERT INTO null_table3(column_x, column_y) VALUES (55, 38);
+INSERT INTO null_table3(column_x, column_y) VALUES (null, 29);
+INSERT INTO null_table3(column_x, column_y) VALUES (41, 24);
+INSERT INTO null_table3(column_x, column_y) VALUES (48, 33);
+INSERT INTO null_table3(column_x, column_y) VALUES (51, 39);
+INSERT INTO null_table3(column_x, column_y) VALUES (49, 32);
+SELECT corr_s(column_x, column_y, 'COEFFICIENT') FROM null_table3;
+ corr_s 
+--------
+     .8
+(1 row)
+
+create table customers1(customer_id number,id number, cust_last_name varchar2(50));
+insert into customers1 values(001,1,'张生');
+insert into customers1 values(002,2,'刘生');
+insert into customers1 values(001,3,'李生');
+select corr_k(customer_id,id,'ONE_SIDED_SIG') from customers1;
+ corr_k 
+--------
+     .5
+(1 row)
+
+select corr_k(customer_id,id,'ONE_SIDED_SIG_POS') from customers1;
+ corr_k 
+--------
+     .5
+(1 row)
+
+select corr_k(customer_id,id,'ONE_SIDED_SIG_NEG') from customers1;
+ corr_k 
+--------
+     .5
+(1 row)
+
+select corr_k(customer_id,id,'TWO_SIDED_SIG') from customers1;
+ corr_k 
+--------
+      1
+(1 row)
+
+CREATE TABLE EMP
+(EMPNO NUMBER(4) NOT NULL,
+ENAME VARCHAR2(10),
+JOB VARCHAR2(9),
+MGR NUMBER(4),
+HIREDATE DATE,
+SAL NUMBER(7, 2),
+COMM NUMBER(7, 2),
+DEPTNO NUMBER(2));
+INSERT INTO EMP VALUES
+(7369, 'SMITH', 'CLERK', 7902,
+TO_DATE('17-DEC-1980', 'DD-MON-YYYY'), 800, NULL, 20);
+INSERT INTO EMP VALUES
+(7499, 'ALLEN', 'SALESMAN', 7698,
+TO_DATE('20-FEB-1981', 'DD-MON-YYYY'), 1600, 300, 30);
+INSERT INTO EMP VALUES
+(7521, 'WARD', 'SALESMAN', 7698,
+TO_DATE('22-FEB-1981', 'DD-MON-YYYY'), 1250, 500, 30);
+INSERT INTO EMP VALUES
+(7566, 'JONES', 'MANAGER', 7839,
+TO_DATE('2-APR-1981', 'DD-MON-YYYY'), 2975, NULL, 20);
+INSERT INTO EMP VALUES
+(7654, 'MARTIN', 'SALESMAN', 7698,
+TO_DATE('28-SEP-1981', 'DD-MON-YYYY'), 1250, 1400, 30);
+INSERT INTO EMP VALUES
+(7698, 'BLAKE', 'MANAGER', 7839,
+TO_DATE('1-MAY-1981', 'DD-MON-YYYY'), 2850, NULL, 30);
+INSERT INTO EMP VALUES
+(7782, 'CLARK', 'MANAGER', 7839,
+TO_DATE('9-JUN-1981', 'DD-MON-YYYY'), 2450, NULL, 10);
+INSERT INTO EMP VALUES
+(7788, 'SCOTT', 'ANALYST', 7566,
+TO_DATE('09-DEC-1982', 'DD-MON-YYYY'), 3000, NULL, 20);
+INSERT INTO EMP VALUES
+(7839, 'KING', 'PRESIDENT', NULL,
+TO_DATE('17-NOV-1981', 'DD-MON-YYYY'), 5000, NULL, 10);
+INSERT INTO EMP VALUES
+(7844, 'TURNER', 'SALESMAN', 7698,
+TO_DATE('8-SEP-1981', 'DD-MON-YYYY'), 1500, 0, 30);
+INSERT INTO EMP VALUES
+(7876, 'ADAMS', 'CLERK', 7788,
+TO_DATE('12-JAN-1983', 'DD-MON-YYYY'), 1100, NULL, 20);
+INSERT INTO EMP VALUES
+(7900, 'JAMES', 'CLERK', 7698,
+TO_DATE('3-DEC-1981', 'DD-MON-YYYY'), 950, NULL, 30);
+INSERT INTO EMP VALUES
+(7902, 'FORD', 'ANALYST', 7566,
+TO_DATE('3-DEC-1981', 'DD-MON-YYYY'), 3000, NULL, 20);
+INSERT INTO EMP VALUES
+(7934, 'MILLER', 'CLERK', 7782,
+TO_DATE('23-JAN-1982', 'DD-MON-YYYY'), 1300, NULL, 10);
+SELECT CORR_K(sal, comm, 'COEFFICIENT') coefficient,
+CORR_K(sal, comm, 'TWO_SIDED_SIG') two_sided_p_value
+FROM EMP;
+    coefficient    | two_sided_p_value 
+-------------------+-------------------
+ -.547722557505166 |  .264288345226028
+(1 row)
+
+CREATE TABLE test_data (
+id NUMBER PRIMARY KEY,
+value1 DOUBLE PRECISION,
+value2 DOUBLE PRECISION
+);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "test_data_pkey" for table "test_data"
+INSERT INTO test_data (id, value1, value2) VALUES (1, 10, 20);
+INSERT INTO test_data (id, value1, value2) VALUES (2, 20, 40);
+INSERT INTO test_data (id, value1, value2) VALUES (3, 30, 60);
+INSERT INTO test_data (id, value1, value2) VALUES (4, 40, 80);
+SELECT CORR_K(value1, value2) FROM test_data;
+ corr_k 
+--------
+      1
+(1 row)
+
+SELECT CORR_S(value1, value2) FROM test_data;
+ corr_s 
+--------
+      1
+(1 row)
+
+CREATE TABLE test_data1 (
+value1 DOUBLE PRECISION,
+value2 DOUBLE PRECISION,
+value3 DOUBLE PRECISION,
+value4 DOUBLE PRECISION,
+value5 DOUBLE PRECISION,
+value6 DOUBLE PRECISION
+);
+INSERT INTO test_data1 (value1, value2, value3, value4, value5, value6) VALUES (1.0, 2.0,'', 4.0, NULL, NULL);
+INSERT INTO test_data1 (value1, value2, value3, value4, value5, value6) VALUES (5.0, 8.0, 5.0, NULL, NULL, NULL);
+INSERT INTO test_data1 (value1, value2, value3, value4, value5, value6) VALUES (NULL, 6.0, 4.0, '', NULL, NULL);
+INSERT INTO test_data1 (value1, value2, value3, value4, value5, value6) VALUES (2.0, NULL, 1.0, 3.0, NULL, NULL);
+INSERT INTO test_data1 (value1, value2, value3, value4, value5, value6) VALUES (13.0, 4.0, 4.0, '', NULL, NULL);
+SELECT corr_s(value1, value2) AS corr_s_value1_value2,
+corr_s(value1, value3) AS corr_s_value1_value3,
+corr_s(value1, value4) AS corr_s_value1_value4,
+corr_s(value2, value3) AS corr_s_value2_value3,
+corr_s(value2, value4) AS corr_s_value2_value4,
+corr_s(value3, value4) AS corr_s_value3_value4,
+corr_s(value4, value6) AS corr_s_value4_value6,
+corr_s(value5, value6) AS corr_s_value5_value6
+FROM test_data1;
+ corr_s_value1_value2 | corr_s_value1_value3 | corr_s_value1_value4 | corr_s_value2_value3 | corr_s_value2_value4 | corr_s_value3_value4 | corr_s_value4_value6 | corr_s_value5_value6 
+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------
+                   .5 |                   .5 |                   -1 |     .866025403784439 |                      |                      |                      |                     
+(1 row)
+
+SELECT corr_k(value1, value2) AS corr_k_value1_value2,
+corr_k(value1, value3) AS corr_k_value1_value3,
+corr_k(value1, value4) AS corr_k_value1_value4,
+corr_k(value2, value3) AS corr_k_value2_value3,
+corr_k(value2, value4) AS corr_k_value2_value4,
+corr_k(value2, value4) AS corr_k_value2_value4,
+corr_k(value4, value6) AS corr_k_value4_value6,
+corr_k(value5, value6) AS corr_k_value5_value6
+FROM test_data1;
+ corr_k_value1_value2 | corr_k_value1_value3 | corr_k_value1_value4 | corr_k_value2_value3 | corr_k_value2_value4 | corr_k_value2_value4 | corr_k_value4_value6 | corr_k_value5_value6 
+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------
+     .333333333333333 |     .333333333333333 |                   -1 |     .816496580927726 |                      |                      |                      |                     
+(1 row)
+
+CREATE TABLE test_data2 (
+id NUMBER PRIMARY KEY,
+value1 DOUBLE PRECISION,
+value2 DOUBLE PRECISION
+);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "test_data2_pkey" for table "test_data2"
+INSERT INTO test_data2 (id, value1, value2) VALUES (1, 10, 20);
+INSERT INTO test_data2 (id, value1, value2) VALUES (2, 20, 40);
+INSERT INTO test_data2 (id, value1, value2) VALUES (3, 30, 60);
+SELECT CORR_K(value1, value2) AS K1,
+CORR_K(value1, value2,'COEFFICIENT') AS K2,
+CORR_K(value1, value2,'ONE_SIDED_SIG') AS K3,
+CORR_K(value1, value2,'ONE_SIDED_SIG_POS') AS K4,
+CORR_K(value1, value2,'ONE_SIDED_SIG_NEG') AS K5,
+CORR_K(value1, value2,'TWO_SIDED_SIG') AS K6 FROM test_data2;
+ k1 | k2 |        k3         |        k4         |        k5        |        k6        
+----+----+-------------------+-------------------+------------------+------------------
+  1 |  1 | .0585925435990691 | .0585925435990691 | .941407456400931 | .117185087198138
+(1 row)
+
+SELECT CORR_S(value1, value2) AS S1,
+CORR_S(value1, value2,'COEFFICIENT') AS S2,
+CORR_S(value1, value2,'ONE_SIDED_SIG') AS S3,
+CORR_S(value1, value2,'ONE_SIDED_SIG_POS') AS S4,
+CORR_S(value1, value2,'ONE_SIDED_SIG_NEG') AS S5,
+CORR_S(value1, value2,'TWO_SIDED_SIG') AS S6 FROM test_data2;
+ s1 | s2 | s3 | s4 | s5 | s6 
+----+----+----+----+----+----
+  1 |  1 |  0 |  0 |  1 |  0
+(1 row)
+
+CREATE TABLE test_data3 (
+value1 DOUBLE PRECISION,
+value2 DOUBLE PRECISION,
+value3 DOUBLE PRECISION,
+value4 DOUBLE PRECISION
+);
+INSERT INTO test_data3 (value1, value2, value3, value4) VALUES (1.0, 2.0,5.0,4.0);
+INSERT INTO test_data3 (value1, value2, value3, value4) VALUES (5.0, 2.0, 5.0,4.0);
+INSERT INTO test_data3 (value1, value2, value3, value4) VALUES (1.0, 6.0, 5.0,4.0);
+INSERT INTO test_data3 (value1, value2, value3, value4) VALUES (2.0, 8.0, 1.0,4.0);
+INSERT INTO test_data3 (value1, value2, value3, value4) VALUES (13.0, 4.0, 4.0,4.0);
+SELECT
+CORR_K(value1, value2) AS corr_value1_value2,
+CORR_K(value1, value3) AS corr_value1_value3,
+CORR_K(value1, value4) AS corr_value1_value4,
+CORR_K(value2, value3) AS corr_value2_value3,
+CORR_K(value2, value4) AS corr_value2_value4,
+CORR_K(value3, value4) AS corr_value3_value4
+FROM test_data3;
+ corr_value1_value2 | corr_value1_value3 | corr_value1_value4 | corr_value2_value3 | corr_value2_value4 | corr_value3_value4 
+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------
+                  0 |  -.377964473009227 |                    |  -.629940788348712 |                    |                   
+(1 row)
+
+SELECT
+CORR_S(value1, value2) AS corr_value1_value2,
+CORR_S(value1, value3) AS corr_value1_value3,
+CORR_S(value1, value4) AS corr_value1_value4,
+CORR_S(value2, value3) AS corr_value2_value3,
+CORR_S(value2, value4) AS corr_value2_value4,
+CORR_S(value3, value4) AS corr_value3_value4
+FROM test_data3;
+ corr_value1_value2 | corr_value1_value3 | corr_value1_value4 | corr_value2_value3 | corr_value2_value4 | corr_value3_value4 
+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------
+ -.0789473684210526 |  -.458831467741123 |                    |  -.688247201611685 |                    |                   
+(1 row)
+
+CREATE TABLE sales_data (
+price DECIMAL(10, 2),
+quantity_sold INT
+);
+DECLARE
+i NUMBER := 1;
+BEGIN
+FOR i IN 1..10000 LOOP
+INSERT INTO sales_data (price, quantity_sold) VALUES (i, i);
+END LOOP;
+COMMIT;
+END;
+/
+SELECT CORR_S(price, quantity_sold) FROM sales_data;
+ corr_s 
+--------
+      1
+(1 row)
+
+SELECT CORR_K(price, quantity_sold) FROM sales_data;
+ corr_k 
+--------
+      1
+(1 row)
+
+drop table test_table;
+drop table null_table1;
+drop table null_table2;
+drop table null_table3;
+drop table customers1;
+drop table EMP;
+drop table test_data;
+drop table test_data1;
+drop table test_data2;
+drop table test_data3;
+DROP TABLE sales_data;
+drop table t1;
+drop schema aggregate CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to table bmsql_item
+drop cascades to table bmsql_new_order
+drop cascades to table test_agg_false

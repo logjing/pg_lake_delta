@@ -1,0 +1,1 @@
+create type atype as (id int, name text);

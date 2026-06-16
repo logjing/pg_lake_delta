@@ -1,0 +1,191 @@
+create database test;
+\c test
+-- diskann basic test
+CREATE TABLE diskann_t1
+(
+    id          SERIAL PRIMARY KEY,
+    description TEXT,
+    embedding   vector(6)
+);
+NOTICE:  CREATE TABLE will create implicit sequence "diskann_t1_id_seq" for serial column "diskann_t1.id"
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "diskann_t1_pkey" for table "diskann_t1"
+INSERT INTO diskann_t1 (description, embedding)
+VALUES ('item 1', '[0.1, 0.2, 0.3, 0.4, 0.5, 0.6]'),
+       ('item 2', '[0.7, 0.8, 0.9, 1.0, 1.1, 1.2]'),
+       ('item 3', '[1.3, 1.4, 1.5, 1.6, 1.7, 1.8]'),
+       ('item 4', '[0.5, 0.4, 0.3, 0.2, 0.1, 0.0]'),
+       ('item 5', '[0.9, 0.8, 0.7, 0.6, 0.5, 0.4]'),
+       ('item 6', '[0.2, 0.4, 0.6, 0.8, 1.0, 1.2]'),
+       ('item 7', '[0.3, 0.6, 0.9, 1.2, 1.5, 1.8]'),
+       ('item 8', '[0.4, 0.3, 0.2, 0.1, 0.0, 0.1]'),
+       ('item 9', '[0.6, 0.5, 0.4, 0.3, 0.2, 0.1]'),
+       ('item 10', '[0.8, 0.6, 0.4, 0.2, 0.0, 0.2]');
+analyze diskann_t1;
+-- l2 distance
+CREATE INDEX idx_vectors_l2 ON diskann_t1 USING diskann(embedding vector_l2_ops);
+EXPLAIN
+(COSTS OFF)
+SELECT /*+ indexscan(diskann_t1 idx_vectors_l2) */ id, description
+FROM diskann_t1
+ORDER BY embedding <-> '[0.3, 0.4, 0.5, 0.6, 0.7, 0.8]' LIMIT 3;
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ [Bypass]
+ Limit
+   ->  Ann Index Scan using idx_vectors_l2 on diskann_t1
+         Order By: (embedding <-> '[0.3,0.4,0.5,0.6,0.7,0.8]'::vector)
+(4 rows)
+
+-- cosine distance
+CREATE INDEX idx_vectors_cosine ON diskann_t1 USING diskann(embedding vector_cosine_ops);
+EXPLAIN
+(COSTS OFF)
+SELECT /*+ indexscan(diskann_t1 idx_vectors_cosine) */ id, description
+FROM diskann_t1
+ORDER BY embedding <=> '[0.3, 0.4, 0.5, 0.6, 0.7, 0.8]' LIMIT 3;
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ [Bypass]
+ Limit
+   ->  Ann Index Scan using idx_vectors_cosine on diskann_t1
+         Order By: (embedding <=> '[0.3,0.4,0.5,0.6,0.7,0.8]'::vector)
+(4 rows)
+
+-- ip distance
+CREATE INDEX idx_vectors_ip ON diskann_t1 USING diskann(embedding vector_ip_ops);
+EXPLAIN
+(COSTS OFF)
+SELECT /*+ indexscan(diskann_t1 idx_vectors_ip) */ id, description
+FROM diskann_t1
+ORDER BY embedding <#> '[0.3, 0.4, 0.5, 0.6, 0.7, 0.8]' LIMIT 3;
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ [Bypass]
+ Limit
+   ->  Ann Index Scan using idx_vectors_ip on diskann_t1
+         Order By: (embedding <#> '[0.3,0.4,0.5,0.6,0.7,0.8]'::vector)
+(4 rows)
+
+-- diskann index size test
+CREATE TABLE diskann_t2
+(
+    id          SERIAL PRIMARY KEY,
+    description TEXT,
+    embedding   vector(10)
+);
+NOTICE:  CREATE TABLE will create implicit sequence "diskann_t2_id_seq" for serial column "diskann_t2.id"
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "diskann_t2_pkey" for table "diskann_t2"
+-- insert 10 items
+INSERT INTO diskann_t2 (description, embedding)
+VALUES ('item 1', '[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]'),
+       ('item 2', '[0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1]'),
+       ('item 3', '[0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]'),
+       ('item 4', '[0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3]'),
+       ('item 5', '[0.5, 0.4, 0.3, 0.2, 0.1, 0.0, 0.1, 0.2, 0.3, 0.4]'),
+       ('item 6', '[0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0, 0.1, 0.2, 0.3]'),
+       ('item 7', '[0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0, 0.1, 0.2]'),
+       ('item 8', '[0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0, 0.1]'),
+       ('item 9', '[0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0]'),
+       ('item 10', '[1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]');
+-- test different index size
+CREATE INDEX idx_vectors_10d_16 ON diskann_t2 USING diskann(embedding vector_l2_ops) WITH (index_size = 16);
+CREATE INDEX idx_vectors_10d_100 ON diskann_t2 USING diskann(embedding vector_l2_ops) WITH (index_size = 100);
+CREATE INDEX idx_vectors_10d_1000 ON diskann_t2 USING diskann(embedding vector_l2_ops) WITH (index_size = 1000);
+CREATE INDEX idx_vectors_10d_invalid1 ON diskann_t2 USING diskann(embedding vector_l2_ops) WITH (index_size = 15);
+ERROR:  value 15 out of bounds for option "index_size"
+DETAIL:  Valid values are between "16" and "1000".
+CREATE INDEX idx_vectors_10d_invalid2 ON diskann_t2 USING diskann(embedding vector_l2_ops) WITH (index_size = 1001);
+ERROR:  value 1001 out of bounds for option "index_size"
+DETAIL:  Valid values are between "16" and "1000".
+-- search test
+EXPLAIN
+(COSTS OFF)
+SELECT /*+ indexscan(diskann_t2 idx_vectors_10d_100) */ id, description
+FROM diskann_t2
+ORDER BY embedding <-> '[0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]' LIMIT 3;
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
+ [Bypass]
+ Limit
+   ->  Ann Index Scan using idx_vectors_10d_100 on diskann_t2
+         Order By: (embedding <-> '[0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]'::vector)
+(4 rows)
+
+CREATE TABLE diskann_t3
+(
+    id INT UNIQUE,
+    vector VECTOR(20)
+);
+NOTICE:  CREATE TABLE / UNIQUE will create implicit index "diskann_t3_id_key" for table "diskann_t3"
+INSERT INTO diskann_t3 VALUES
+    (0, '[64, 83, 99, 42, 52, 92, 19, 33, 32, 36, 76, 72, 0, 85, 42, 94, 71, 78, 85, 89]'),
+    (1, '[47, 29, 34, 58, 17, 89, 67, 43, 95, 94, 1, 82, 36, 3, 80, 72, 82, 78, 61, 75]'),
+    (2, '[47, 63, 36, 94, 87, 72, 53, 69, 85, 89, 19, 28, 25, 76, 30, 15, 8, 0, 31, 35]'),
+    (3, '[81, 75, 93, 97, 93, 68, 34, 73, 53, 8, 17, 27, 95, 29, 91, 73, 2, 17, 46, 18]'),
+    (4, '[36, 68, 76, 52, 31, 65, 48, 45, 51, 96, 80, 78, 88, 43, 4, 57, 51, 21, 58, 64]'),
+    (5, '[65, 98, 43, 60, 8, 65, 6, 94, 56, 94, 61, 99, 76, 86, 20, 56, 27, 6, 28, 14]'),
+    (6, '[12, 32, 96, 61, 9, 20, 76, 85, 89, 32, 10, 19, 69, 23, 87, 37, 100, 8, 14, 34]'),
+    (7, '[93, 96, 8, 51, 15, 94, 50, 6, 6, 10, 78, 66, 36, 45, 7, 26, 60, 80, 65, 7]'),
+    (8, '[31, 79, 19, 39, 23, 82, 56, 39, 25, 19, 58, 12, 67, 46, 68, 84, 1, 54, 18, 81]'),
+    (9, '[43, 78, 87, 41, 21, 32, 23, 1, 83, 93, 23, 1, 73, 65, 19, 36, 39, 89, 96, 37]');
+CREATE INDEX idx_vectors_t3_cosine ON diskann_t3 USING diskann(vector vector_cosine_ops);
+SELECT /*+ indexscan(diskann_t3 idx_vectors_t3_cosine) */ *
+FROM diskann_t3
+ORDER BY vector <-> '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 ,14, 15, 16, 17, 18, 19, 20]' LIMIT 2;
+ id |                            vector                            
+----+--------------------------------------------------------------
+  8 | [31,79,19,39,23,82,56,39,25,19,58,12,67,46,68,84,1,54,18,81]
+  7 | [93,96,8,51,15,94,50,6,6,10,78,66,36,45,7,26,60,80,65,7]
+(2 rows)
+
+DELETE FROM diskann_t3 WHERE id = 8;
+SELECT /*+ indexscan(diskann_t3 idx_vectors_t3_cosine) */ *
+FROM diskann_t3
+ORDER BY vector <-> '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 ,14, 15, 16, 17, 18, 19, 20]' LIMIT 2;
+ id |                            vector                            
+----+--------------------------------------------------------------
+  7 | [93,96,8,51,15,94,50,6,6,10,78,66,36,45,7,26,60,80,65,7]
+  6 | [12,32,96,61,9,20,76,85,89,32,10,19,69,23,87,37,100,8,14,34]
+(2 rows)
+
+INSERT INTO diskann_t3 VALUES (10, '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 ,14, 15, 16, 17, 18, 19, 20]');
+SELECT /*+ indexscan(diskann_t3 idx_vectors_t3_cosine) */ *
+FROM diskann_t3
+ORDER BY vector <-> '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 ,14, 15, 16, 17, 18, 19, 20]' LIMIT 2;
+ id |                          vector                          
+----+----------------------------------------------------------
+ 10 | [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+  7 | [93,96,8,51,15,94,50,6,6,10,78,66,36,45,7,26,60,80,65,7]
+(2 rows)
+
+UPDATE diskann_t3 set vector = '[20, 19, 18, 17, 16, 15, 14, 13 ,12 ,11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]' WHERE id = 7;
+SELECT /*+ indexscan(diskann_t3 idx_vectors_t3_cosine) */ *
+FROM diskann_t3
+ORDER BY vector <-> '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 ,14, 15, 16, 17, 18, 19, 20]' LIMIT 2;
+ id |                        vector                        
+----+------------------------------------------------------
+ 10 | [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+  7 | [20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1]
+(2 rows)
+
+DELETE FROM diskann_t3 WHERE id = 10 OR id = 7;
+SELECT /*+ indexscan(diskann_t3 idx_vectors_t3_cosine) */ *
+FROM diskann_t3
+ORDER BY vector <-> '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 ,14, 15, 16, 17, 18, 19, 20]' LIMIT 2;
+ id |                            vector                            
+----+--------------------------------------------------------------
+  6 | [12,32,96,61,9,20,76,85,89,32,10,19,69,23,87,37,100,8,14,34]
+  9 | [43,78,87,41,21,32,23,1,83,93,23,1,73,65,19,36,39,89,96,37]
+(2 rows)
+
+-- test max dimension
+CREATE TABLE diskann_t4
+(
+    id INT UNIQUE,
+    vector VECTOR(1537)
+);
+NOTICE:  CREATE TABLE / UNIQUE will create implicit index "diskann_t4_id_key" for table "diskann_t4"
+CREATE INDEX idx_vectors_t4_cosine ON diskann_t4 USING diskann(vector vector_cosine_ops);
+ERROR:  column cannot have more than 1536 dimensions for diskann index
+\c regression
+drop database test;

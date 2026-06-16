@@ -1,0 +1,2337 @@
+create schema functions_test;
+set search_path = 'functions_test';
+-- test @@rowcount
+create table t1 (c1 int);
+select @@rowcount;
+ rowcount 
+----------
+        0
+(1 row)
+
+insert into t1 values(generate_series(1,10));
+select @@rowcount;
+ rowcount 
+----------
+       10
+(1 row)
+
+delete t1 where c1 in (1,3,5,7);
+select @@rowcount;
+ rowcount 
+----------
+        4
+(1 row)
+
+update t1 set c1 = 12 where c1 in (2,4);
+select @@rowcount;
+ rowcount 
+----------
+        2
+(1 row)
+
+select * from t1; 
+ c1 
+----
+  6
+  8
+  9
+ 10
+ 12
+ 12
+(6 rows)
+
+select @@rowcount;
+ rowcount 
+----------
+        6
+(1 row)
+
+select count(*) from t1;
+ count 
+-------
+     6
+(1 row)
+
+select @@rowcount;
+ rowcount 
+----------
+        1
+(1 row)
+
+do $$
+begin
+execute 'select * from t1';
+RAISE NOTICE '@@rowcount: %', @@rowcount;
+end $$;
+NOTICE:  @@rowcount: 6
+set enable_set_variable_b_format to on;
+select @@rowcount;
+ rowcount 
+----------
+        0
+(1 row)
+
+reset enable_set_variable_b_format;
+select @@rowcount;
+ rowcount 
+----------
+        0
+(1 row)
+
+begin transaction;
+declare c1 cursor for select * from t1;
+select @@rowcount;
+ rowcount 
+----------
+        0
+(1 row)
+
+fetch next from c1;
+ c1 
+----
+  6
+(1 row)
+
+select @@rowcount;
+ rowcount 
+----------
+        1
+(1 row)
+
+rollback transaction;
+select abcd from t1; -- expect error 
+ERROR:  column "abcd" does not exist
+LINE 1: select abcd from t1;
+               ^
+CONTEXT:  referenced column: abcd
+select @@rowcount;
+ rowcount 
+----------
+        0
+(1 row)
+
+-- rowcount_big()
+drop table t1;
+select rowcount_big();
+ rowcount_big 
+--------------
+            0
+(1 row)
+
+create table t1 (c1 int);
+select rowcount_big();
+ rowcount_big 
+--------------
+            0
+(1 row)
+
+insert into t1 values(generate_series(1,10));
+select rowcount_big();
+ rowcount_big 
+--------------
+           10
+(1 row)
+
+delete t1 where c1 in (1,3,5,7);
+select rowcount_big();
+ rowcount_big 
+--------------
+            4
+(1 row)
+
+update t1 set c1 = 12 where c1 in (2,4);
+select rowcount_big();
+ rowcount_big 
+--------------
+            2
+(1 row)
+
+select * from t1; 
+ c1 
+----
+  6
+  8
+  9
+ 10
+ 12
+ 12
+(6 rows)
+
+select rowcount_big();
+ rowcount_big 
+--------------
+            6
+(1 row)
+
+select count(*) from t1;
+ count 
+-------
+     6
+(1 row)
+
+select rowcount_big();
+ rowcount_big 
+--------------
+            1
+(1 row)
+
+set enable_set_variable_b_format to on;
+select rowcount_big();
+ rowcount_big 
+--------------
+            0
+(1 row)
+
+reset enable_set_variable_b_format;
+select rowcount_big();
+ rowcount_big 
+--------------
+            0
+(1 row)
+
+begin transaction;
+declare c1 cursor for select * from t1;
+select rowcount_big();
+ rowcount_big 
+--------------
+            0
+(1 row)
+
+fetch next from c1;
+ c1 
+----
+  6
+(1 row)
+
+select rowcount_big();
+ rowcount_big 
+--------------
+            1
+(1 row)
+
+rollback transaction;
+select abcd from t1; -- expect error 
+ERROR:  column "abcd" does not exist
+LINE 1: select abcd from t1;
+               ^
+CONTEXT:  referenced column: abcd
+select rowcount_big();
+ rowcount_big 
+--------------
+            0
+(1 row)
+
+-- bypass usecases
+set enable_seqscan to off;
+set enable_bitmapscan to off;
+create index i1 on t1(c1);
+explain (costs off) select * from t1;
+           QUERY PLAN           
+--------------------------------
+ [Bypass]
+ Index Only Scan using i1 on t1
+(2 rows)
+
+select @@rowcount;
+ rowcount 
+----------
+        0
+(1 row)
+
+select * from t1;
+ c1 
+----
+  6
+  8
+  9
+ 10
+ 12
+ 12
+(6 rows)
+
+select @@rowcount;
+ rowcount 
+----------
+        6
+(1 row)
+
+explain (costs off) insert into t1 values(20);
+  QUERY PLAN  
+--------------
+ [Bypass]
+ Insert on t1
+   ->  Result
+(3 rows)
+
+insert into t1 values(generate_series(20,26));
+select @@rowcount;
+ rowcount 
+----------
+        7
+(1 row)
+
+explain (costs off) delete from t1 where c1 < 10;
+           QUERY PLAN            
+---------------------------------
+ [Bypass]
+ Delete on t1
+   ->  Index Scan using i1 on t1
+         Index Cond: (c1 < 10)
+(4 rows)
+
+delete from t1 where c1 < 10;
+select @@rowcount;
+ rowcount 
+----------
+        3
+(1 row)
+
+explain (costs off) update t1 set c1 = 30 where c1 > 21;
+           QUERY PLAN            
+---------------------------------
+ [Bypass]
+ Update on t1
+   ->  Index Scan using i1 on t1
+         Index Cond: (c1 > 21)
+(4 rows)
+
+update t1 set c1 = 30 where c1 > 21;
+select @@rowcount;
+ rowcount 
+----------
+        5
+(1 row)
+
+reset enable_seqscan;
+reset enable_bitmapscan;
+-- @@spid
+select @@spid;
+--?.* 
+--?.*
+--?.*
+(1 row)
+
+-- @@fetch_status
+-- single cursor
+begin transaction;
+cursor c1 for select * from t1;
+fetch next from c1;
+ c1 
+----
+ 10
+(1 row)
+
+select @@fetch_status;
+ fetch_status 
+--------------
+            0
+(1 row)
+
+fetch next from c1;
+ c1 
+----
+ 12
+(1 row)
+
+select @@fetch_status;
+ fetch_status 
+--------------
+            0
+(1 row)
+
+fetch last from c1;
+ c1 
+----
+ 30
+(1 row)
+
+select @@fetch_status;
+ fetch_status 
+--------------
+            0
+(1 row)
+
+fetch next from c2;	-- expect error
+ERROR:  cursor "c2" does not exist
+select @@fetch_status;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block, firstChar[Q]
+rollback transaction;
+-- multi cursors
+begin transaction;
+cursor c1 for select * from t1;
+cursor c2 for select * from t1;
+fetch next from c1;
+ c1 
+----
+ 10
+(1 row)
+
+select @@fetch_status;
+ fetch_status 
+--------------
+            0
+(1 row)
+
+fetch next from c2;
+ c1 
+----
+ 10
+(1 row)
+
+select @@fetch_status;
+ fetch_status 
+--------------
+            0
+(1 row)
+
+fetch last from c1;
+ c1 
+----
+ 30
+(1 row)
+
+select @@fetch_status;
+ fetch_status 
+--------------
+            0
+(1 row)
+
+fetch next from c2;
+ c1 
+----
+ 12
+(1 row)
+
+select @@fetch_status;
+ fetch_status 
+--------------
+            0
+(1 row)
+
+rollback transaction;
+-- pl/pgsql usecases
+declare
+rowcount int;
+rowcount_big bigint;
+spid bigint;
+begin
+spid := @@spid;
+RAISE NOTICE '@@spid: %', spid;
+execute 'select * from t1';
+rowcount := @@rowcount;
+RAISE NOTICE '@@rowcount: %', rowcount;
+execute 'select * from t1';
+rowcount_big := rowcount_big();
+RAISE NOTICE '@@rowcount_big: %', rowcount_big;
+end;
+/
+--?.*
+NOTICE:  @@rowcount: 10
+NOTICE:  @@rowcount_big: 10
+-- pl/tsql usecases
+CREATE OR REPLACE FUNCTION test_pltsql RETURNS INT AS
+$$
+declare
+rowcount int;
+rowcount_big bigint;
+spid bigint;
+begin
+spid := @@spid;
+RAISE NOTICE '@@spid: %', spid;
+execute 'select * from t1';
+rowcount := @@rowcount;
+RAISE NOTICE '@@rowcount: %', rowcount;
+execute 'select * from t1';
+rowcount_big := rowcount_big();
+RAISE NOTICE '@@rowcount_big: %', rowcount_big;
+return 0;
+end;
+$$
+LANGUAGE 'pltsql';
+select test_pltsql();
+--?.*
+CONTEXT:  referenced column: test_pltsql
+NOTICE:  @@rowcount: 10
+CONTEXT:  referenced column: test_pltsql
+NOTICE:  @@rowcount_big: 10
+CONTEXT:  referenced column: test_pltsql
+ test_pltsql 
+-------------
+           0
+(1 row)
+
+drop table t1;
+drop function test_pltsql();
+-- databasepropertyex
+create database test_databasepropertyex dbcompatibility 'd';
+select databasepropertyex('test_databasepropertyex', 'Collation');
+ databasepropertyex 
+--------------------
+--?.*
+(1 row)
+
+select pg_typeof(databasepropertyex('test_databasepropertyex', 'Collation'));
+  pg_typeof  
+-------------
+ sql_variant
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'ComparisonStyle');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'Edition');
+ databasepropertyex 
+--------------------
+ Standard
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsAnsiNullDefault');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsAnsiNullsEnabled');
+ databasepropertyex 
+--------------------
+ 1
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsAnsiPaddingEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsAnsiWarningsEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsArithmeticAbortEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsAutoClose');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsAutoCreateStatistics');
+ databasepropertyex 
+--------------------
+ 1
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsAutoCreateStatisticsIncremental');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsAutoShrink');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsAutoUpdateStatistics');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsClone');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsCloseCursorsOnCommitEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsDatabaseSuspendedForSnapshotBackup');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsFulltextEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsInStandBy');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsLocalCursorsDefault');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsMemoryOptimizedElevateToSnapshotEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsMergePublished');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsNullConcat');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsNumericRoundAbortEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsParameterizationForced');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsQuotedIdentifiersEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsPublished');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsRecursiveTriggersEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsSubscribed');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsSyncWithBackup');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsTornPageDetectionEnabled');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsVerifiedClone');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'IsXTPSupported');
+ databasepropertyex 
+--------------------
+ 0
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'LastGoodCheckDbTime');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'LCID');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'MaxSizeInBytes');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'Recovery');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'ServiceObjective');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'SQLSortOrder');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'Status');
+ databasepropertyex 
+--------------------
+ ONLINE
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'Updateability');
+ databasepropertyex 
+--------------------
+ READ_WRITE
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'UserAccess');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'Version');
+ databasepropertyex 
+--------------------
+--?.*
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'ReplicaID');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+--- expected null
+select databasepropertyex('test_databasepropertyex', 'Collation_fake');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex_fake', 'Collation');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('null', 'Collation');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('test_databasepropertyex', 'null');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+select databasepropertyex('null', 'null');
+ databasepropertyex 
+--------------------
+ 
+(1 row)
+
+drop database test_databasepropertyex;
+-- suser_name/suser_sname
+SELECT suser_name() AS CurrentLoginName;
+ currentloginname 
+------------------
+--?.*
+(1 row)
+
+create user u1 identified by 'Test@123';
+SET SESSION AUTHORIZATION u1 PASSWORD 'Test@123';
+SELECT suser_name() AS CurrentLoginName;
+ currentloginname 
+------------------
+ u1
+(1 row)
+
+RESET SESSION AUTHORIZATION;
+create role u2 identified by 'Test@123';
+SET SESSION AUTHORIZATION u2 PASSWORD 'Test@123';
+SELECT suser_name() AS CurrentLoginName;
+ currentloginname 
+------------------
+ 
+(1 row)
+
+RESET SESSION AUTHORIZATION;
+select suser_name(oid) from pg_authid where rolname in ('u1', 'u2');
+ suser_name 
+------------
+ u1
+ 
+(2 rows)
+
+drop user u1;
+drop user u2;
+SELECT suser_name(-111);
+ suser_name 
+------------
+ 
+(1 row)
+
+SELECT suser_name('-111');
+ suser_name 
+------------
+ 
+(1 row)
+
+SELECT suser_name('aaa');
+ERROR:  invalid input syntax for type oid: "aaa"
+LINE 1: SELECT suser_name('aaa');
+                          ^
+CONTEXT:  referenced column: suser_name
+SELECT suser_name(null);
+ suser_name 
+------------
+ 
+(1 row)
+
+SELECT suser_sname(-111);
+ERROR:  function suser_sname(integer) does not exist
+LINE 1: SELECT suser_sname(-111);
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+CONTEXT:  referenced column: suser_sname
+SELECT suser_sname('-111');
+ suser_sname 
+-------------
+ 
+(1 row)
+
+SELECT suser_sname('aaa');
+ suser_sname 
+-------------
+ 
+(1 row)
+
+SELECT suser_sname(null);
+ suser_sname 
+-------------
+ 
+(1 row)
+
+-- scope_identity
+--- This function returns the last identity value generated for any table in the current session and the current scope.
+create schema test_scope_identity;
+set search_path to test_scope_identity;
+--- base test
+create table t1 (c1 int identity(100, 1), c2 int);
+NOTICE:  CREATE TABLE will create implicit sequence "t1_c1_seq_identity" for serial column "t1.c1"
+insert into t1 values (1);
+insert into t1 values (2);
+insert into t1 values (3);
+insert into t1 values (4);
+insert into t1 values (5);
+select scope_identity();
+ scope_identity 
+----------------
+            104
+(1 row)
+
+insert into t1 values (6);
+select scope_identity();
+ scope_identity 
+----------------
+            105
+(1 row)
+
+create table t2 (c1 int, c2 int identity(200, 1));
+NOTICE:  CREATE TABLE will create implicit sequence "t2_c2_seq_identity" for serial column "t2.c2"
+insert into t2 values (1);
+insert into t2 values (2);
+select scope_identity();
+ scope_identity 
+----------------
+            201
+(1 row)
+
+insert into t2 values (3);
+select scope_identity();
+ scope_identity 
+----------------
+            202
+(1 row)
+
+insert into t1 values (7);
+select scope_identity();
+ scope_identity 
+----------------
+            106
+(1 row)
+
+insert into t2 values (4);
+select scope_identity();
+ scope_identity 
+----------------
+            203
+(1 row)
+
+--- function test
+create or replace function test_fn_scope_identity() returns int as $$
+begin
+    insert into t1 values (5);
+    return scope_identity();
+end; 
+$$ language plpgsql;
+select test_fn_scope_identity();
+ test_fn_scope_identity 
+------------------------
+                    107
+(1 row)
+
+select scope_identity();
+ scope_identity 
+----------------
+            107
+(1 row)
+
+insert into t2 values (5);
+select scope_identity();
+ scope_identity 
+----------------
+            204
+(1 row)
+
+--- procedure test
+create or replace procedure test_proc_scope_identity() as
+declare
+    v1 int;
+begin
+    insert into t1 values (6);
+    v1 := scope_identity();
+    raise notice 'test_proc_scope_identity, scope_identity: %', v1;
+end;
+/
+call test_proc_scope_identity();
+NOTICE:  test_proc_scope_identity, scope_identity: 108
+ test_proc_scope_identity 
+--------------------------
+ 
+(1 row)
+
+select scope_identity();
+ scope_identity 
+----------------
+            204
+(1 row)
+
+insert into t2 values (6);
+select scope_identity();
+ scope_identity 
+----------------
+            205
+(1 row)
+
+--- before trigger test
+create table t3 (c1 int identity(300, 1), c2 int);
+NOTICE:  CREATE TABLE will create implicit sequence "t3_c1_seq_identity" for serial column "t3.c1"
+create or replace function test_fn_trg_scope_identity_before() returns trigger as $$
+declare
+    v1 int;
+begin
+    insert into t1 values (7);
+    v1 := scope_identity();
+    raise notice 'test_fn_trg_scope_identity_before, scope_identity: %', v1;
+    return new;
+end;
+$$ language pltsql;
+create trigger trg_scope_identity_before
+    before insert on t3
+    for each row execute procedure test_fn_trg_scope_identity_before();
+insert into t3 values (1);
+NOTICE:  test_fn_trg_scope_identity_before, scope_identity: 109
+insert into t3 values (2);
+NOTICE:  test_fn_trg_scope_identity_before, scope_identity: 110
+select scope_identity();
+ scope_identity 
+----------------
+            301
+(1 row)
+
+insert into t3 values (3);
+NOTICE:  test_fn_trg_scope_identity_before, scope_identity: 111
+select scope_identity();
+ scope_identity 
+----------------
+            302
+(1 row)
+
+insert into t2 values (4);
+select scope_identity();
+ scope_identity 
+----------------
+            206
+(1 row)
+
+insert into t3 values (4);
+NOTICE:  test_fn_trg_scope_identity_before, scope_identity: 112
+select scope_identity();
+ scope_identity 
+----------------
+            303
+(1 row)
+
+--- after trigger test
+create table t4 (c1 int identity(400, 1), c2 int);
+NOTICE:  CREATE TABLE will create implicit sequence "t4_c1_seq_identity" for serial column "t4.c1"
+create or replace function test_fn_trg_scope_identity_after() returns trigger as $$
+declare
+    v1 int;
+begin
+    insert into t1 values (8);
+    v1 := scope_identity();
+    raise notice 'test_fn_trg_scope_identity_after, scope_identity: %', v1;
+    return new;
+end;
+$$ language pltsql;
+create trigger trg_scope_identity_after
+    after insert on t4
+    for each row execute procedure test_fn_trg_scope_identity_after();
+insert into t4 values (1);
+NOTICE:  test_fn_trg_scope_identity_after, scope_identity: 113
+insert into t4 values (2);
+NOTICE:  test_fn_trg_scope_identity_after, scope_identity: 114
+select scope_identity();
+ scope_identity 
+----------------
+            401
+(1 row)
+
+insert into t4 values (3);
+NOTICE:  test_fn_trg_scope_identity_after, scope_identity: 115
+select scope_identity();
+ scope_identity 
+----------------
+            402
+(1 row)
+
+insert into t2 values (5);
+select scope_identity();
+ scope_identity 
+----------------
+            207
+(1 row)
+
+insert into t4 values (4);
+NOTICE:  test_fn_trg_scope_identity_after, scope_identity: 116
+select scope_identity();
+ scope_identity 
+----------------
+            403
+(1 row)
+
+--- test plpgsql trigger
+create table t5 (c1 int identity(500, 1), c2 int);
+NOTICE:  CREATE TABLE will create implicit sequence "t5_c1_seq_identity" for serial column "t5.c1"
+create or replace function test_fn_trg_scope_identity_plpgsql() returns trigger as $$
+declare
+    v1 int;
+begin
+    insert into t1 values (9);
+    v1 := scope_identity();
+    raise notice 'test_fn_trg_scope_identity_plpgsql, scope_identity: %', v1;
+    return new;
+end;
+$$ language plpgsql;
+create trigger trg_scope_identity_plpgsql
+    before insert on t5
+    for each row execute procedure test_fn_trg_scope_identity_plpgsql();
+insert into t5 values (1);
+NOTICE:  test_fn_trg_scope_identity_plpgsql, scope_identity: 117
+insert into t5 values (2);
+NOTICE:  test_fn_trg_scope_identity_plpgsql, scope_identity: 118
+select scope_identity();
+ scope_identity 
+----------------
+            501
+(1 row)
+
+insert into t5 values (3);
+NOTICE:  test_fn_trg_scope_identity_plpgsql, scope_identity: 119
+select scope_identity();
+ scope_identity 
+----------------
+            502
+(1 row)
+
+insert into t2 values (6);
+select scope_identity();
+ scope_identity 
+----------------
+            208
+(1 row)
+
+insert into t5 values (4);
+NOTICE:  test_fn_trg_scope_identity_plpgsql, scope_identity: 120
+select scope_identity();
+ scope_identity 
+----------------
+            503
+(1 row)
+
+drop table t1;
+drop table t2;
+drop table t3;
+drop table t4; 
+drop table t5;
+drop function test_fn_scope_identity();
+drop function test_proc_scope_identity();
+drop function test_fn_trg_scope_identity_before();
+drop function test_fn_trg_scope_identity_after();
+drop function test_fn_trg_scope_identity_plpgsql();
+reset search_path;
+drop schema test_scope_identity cascade;
+-- @@PROCID
+--- test procedure
+CREATE OR REPLACE PROCEDURE test_procid 
+AS  
+DECLARE
+	ProcID integer; 
+BEGIN
+	ProcID = @@PROCID;
+	RAISE INFO 'Stored procedure: %', ProcID;
+END;
+/
+select test_procid();
+--?.*
+CONTEXT:  referenced column: test_procid
+ test_procid 
+-------------
+ 
+(1 row)
+
+SELECT oid FROM pg_proc WHERE proname = 'test_procid' AND prokind = 'p';
+  oid  
+-------
+--?.*
+(1 row)
+
+--- test function
+CREATE OR REPLACE FUNCTION test_funcid() returns int as $$
+begin
+    return @@PROCID;
+end; 
+$$ language pltsql;
+select test_funcid();
+ test_funcid 
+-------------
+--?.*
+(1 row)
+
+SELECT oid FROM pg_proc WHERE proname = 'test_funcid' AND prokind = 'f';
+  oid  
+-------
+--?.*
+(1 row)
+
+--- test trigger
+drop table if exists t;
+NOTICE:  table "t" does not exist, skipping
+create table t (c1 int identity, c2 int);
+NOTICE:  CREATE TABLE will create implicit sequence "t_c1_seq_identity" for serial column "t.c1"
+create or replace function test_triggerid() returns trigger as $$
+declare
+    val int;
+begin
+    val := @@PROCID;
+    raise notice 'Triggerid: %', val;
+    return new;
+end;
+$$ language plpgsql;
+create trigger trg_procid
+    before insert on t
+    for each row execute procedure test_triggerid();
+insert into t values (1);
+--?.*
+SELECT oid FROM pg_proc WHERE proname = 'test_triggerid' AND prokind = 'f';
+  oid  
+-------
+--?.*
+(1 row)
+
+drop table t;
+--- test nested call
+CREATE OR REPLACE PROCEDURE test_procid_inner
+AS  
+DECLARE
+	ProcID integer; 
+BEGIN
+	ProcID = @@PROCID;  
+	RAISE INFO 'Inner Stored procedure: %', ProcID;
+END;
+/
+CREATE OR REPLACE PROCEDURE test_procid_outer
+AS  
+DECLARE
+	OuterProcID integer;
+	InnerProcID integer;
+BEGIN
+	OuterProcID = @@PROCID;  
+	RAISE INFO 'Outer stored procedure: %', OuterProcID;
+	
+	PERFORM test_procid_inner();  
+END;
+/
+call test_procid_outer();
+--?.*
+--?.*
+CONTEXT:  referenced column: test_procid_inner
+SQL statement "SELECT test_procid_inner()"
+PL/pgSQL function test_procid_outer() line 8 at PERFORM
+ test_procid_outer 
+-------------------
+ 
+(1 row)
+
+SELECT oid FROM pg_proc WHERE proname = 'test_procid_outer' AND prokind = 'p';
+  oid  
+-------
+--?.*
+(1 row)
+
+SELECT oid FROM pg_proc WHERE proname = 'test_procid_inner' AND prokind = 'p';
+  oid  
+-------
+--?.*
+(1 row)
+
+--- test anonymous block
+declare
+    procid int;
+begin
+ 	procid = @@PROCID;  
+	RAISE INFO 'anonymous block: %', procid;
+end;
+/
+INFO:  anonymous block: 0
+-- test ident_current
+create schema test_ident_current;
+set search_path = 'test_ident_current';
+select sys.ident_current(null);
+ ident_current 
+---------------
+              
+(1 row)
+
+select sys.ident_current('t1');
+ ident_current 
+---------------
+              
+(1 row)
+
+drop table if exists t1;
+NOTICE:  table "t1" does not exist, skipping
+create table t1 (c1 int identity(100,1), c2 int);
+NOTICE:  CREATE TABLE will create implicit sequence "t1_c1_seq_identity" for serial column "t1.c1"
+select sys.ident_current('t1');
+ ident_current 
+---------------
+           100
+(1 row)
+
+insert into t1(c2) values(10);
+select * from t1;
+ c1  | c2 
+-----+----
+ 100 | 10
+(1 row)
+
+select sys.ident_current('t1');
+ ident_current 
+---------------
+           100
+(1 row)
+
+insert into t1(c2) values(11);
+select * from t1;
+ c1  | c2 
+-----+----
+ 100 | 10
+ 101 | 11
+(2 rows)
+
+select sys.ident_current('t1');
+ ident_current 
+---------------
+           101
+(1 row)
+
+drop table if exists t2;
+NOTICE:  table "t2" does not exist, skipping
+create table t2 (c1 int identity(200,1), c2 int);
+NOTICE:  CREATE TABLE will create implicit sequence "t2_c1_seq_identity" for serial column "t2.c1"
+select sys.ident_current('t2');
+ ident_current 
+---------------
+           200
+(1 row)
+
+insert into t2(c2) values(20);
+select * from t2;
+ c1  | c2 
+-----+----
+ 200 | 20
+(1 row)
+
+select sys.ident_current('t2');
+ ident_current 
+---------------
+           200
+(1 row)
+
+insert into t2(c2) values(21);
+select * from t2;
+ c1  | c2 
+-----+----
+ 200 | 20
+ 201 | 21
+(2 rows)
+
+select sys.ident_current('t2');
+ ident_current 
+---------------
+           201
+(1 row)
+
+drop table t1;
+drop table t2;
+create table "T_IDENTITY_0001"(id int identity, name varchar(10));
+NOTICE:  CREATE TABLE will create implicit sequence "T_IDENTITY_0001_id_seq_identity" for serial column "T_IDENTITY_0001.id"
+insert into "T_IDENTITY_0001"(name) values('zhangsan');
+insert into "T_IDENTITY_0001"(name) values('lisi');
+select * from "T_IDENTITY_0001";
+ id |   name   
+----+----------
+  1 | zhangsan
+  2 | lisi
+(2 rows)
+
+select ident_current('"T_IDENTITY_0001"');
+ ident_current 
+---------------
+             2
+(1 row)
+
+select ident_current("T_IDENTITY_0001");
+ERROR:  column "T_IDENTITY_0001" does not exist
+LINE 1: select ident_current("T_IDENTITY_0001");
+                             ^
+CONTEXT:  referenced column: ident_current
+create or replace view "V_IDENTITY_0001" as select * from "T_IDENTITY_0001";
+select * from "V_IDENTITY_0001";
+ id |   name   
+----+----------
+  1 | zhangsan
+  2 | lisi
+(2 rows)
+
+select ident_current('"V_IDENTITY_0001"');
+ ident_current 
+---------------
+              
+(1 row)
+
+select ident_current('"T_IDENTITY_0001"');
+ ident_current 
+---------------
+             2
+(1 row)
+
+drop view "V_IDENTITY_0001";
+drop table "T_IDENTITY_0001";
+create table test_identity1(id int identity(100, 1), idd serial, name varchar(20));
+NOTICE:  CREATE TABLE will create implicit sequence "test_identity1_id_seq_identity" for serial column "test_identity1.id"
+NOTICE:  CREATE TABLE will create implicit sequence "test_identity1_idd_seq" for serial column "test_identity1.idd"
+insert into test_identity1(name) values('test1');
+select * from test_identity1;
+ id  | idd | name  
+-----+-----+-------
+ 100 |   1 | test1
+(1 row)
+
+select ident_current('test_identity1');
+ ident_current 
+---------------
+           100
+(1 row)
+
+drop table test_identity1;
+-- ident_current only for identity, not for serial
+create table test_identity2(idd serial, name varchar(20));
+NOTICE:  CREATE TABLE will create implicit sequence "test_identity2_idd_seq" for serial column "test_identity2.idd"
+insert into test_identity2(name) values('test1');
+select * from test_identity2;
+ idd | name  
+-----+-------
+   1 | test1
+(1 row)
+
+select ident_current('test_identity2');
+ ident_current 
+---------------
+              
+(1 row)
+
+drop table test_identity2;
+create table t_identity_0020(id int identity, name varchar(10));
+NOTICE:  CREATE TABLE will create implicit sequence "t_identity_0020_id_seq_identity" for serial column "t_identity_0020.id"
+insert into t_identity_0020(name) values('zhangsan');
+select * from t_identity_0020;
+ id |   name   
+----+----------
+  1 | zhangsan
+(1 row)
+
+select ident_current('t_identity_0020');
+ ident_current 
+---------------
+             1
+(1 row)
+
+alter table t_identity_0020 drop column id;
+select * from t_identity_0020;
+   name   
+----------
+ zhangsan
+(1 row)
+
+select ident_current('t_identity_0020');
+ ident_current 
+---------------
+              
+(1 row)
+
+alter table t_identity_0020 add column id int identity;
+NOTICE:  ALTER TABLE will create implicit sequence "t_identity_0020_id_seq_identity" for serial column "t_identity_0020.id"
+select * from t_identity_0020;
+   name   | id 
+----------+----
+ zhangsan |  1
+(1 row)
+
+select ident_current('t_identity_0020');
+ ident_current 
+---------------
+             1
+(1 row)
+
+insert into t_identity_0020(name) values('name1');
+select * from t_identity_0020;
+   name   | id 
+----------+----
+ zhangsan |  1
+ name1    |  2
+(2 rows)
+
+select ident_current('t_identity_0020');
+ ident_current 
+---------------
+             2
+(1 row)
+
+alter table t_identity_0020 drop column id;
+select * from t_identity_0020;
+   name   
+----------
+ zhangsan
+ name1
+(2 rows)
+
+select ident_current('t_identity_0020');
+ ident_current 
+---------------
+              
+(1 row)
+
+alter table t_identity_0020 add column id int identity(100, 5);
+NOTICE:  ALTER TABLE will create implicit sequence "t_identity_0020_id_seq_identity" for serial column "t_identity_0020.id"
+select * from t_identity_0020;
+   name   | id  
+----------+-----
+ zhangsan | 100
+ name1    | 105
+(2 rows)
+
+select ident_current('t_identity_0020');
+ ident_current 
+---------------
+           105
+(1 row)
+
+insert into t_identity_0020(name) values('name5');
+select * from t_identity_0020;
+   name   | id  
+----------+-----
+ zhangsan | 100
+ name1    | 105
+ name5    | 110
+(3 rows)
+
+select ident_current('t_identity_0020');
+ ident_current 
+---------------
+           110
+(1 row)
+
+drop table t_identity_0020;
+create schema schema_ident_current_0001;
+create table schema_ident_current_0001.t_identity_0001(id int identity(101,1), name varchar(10));
+NOTICE:  CREATE TABLE will create implicit sequence "t_identity_0001_id_seq_identity" for serial column "t_identity_0001.id"
+insert into schema_ident_current_0001.t_identity_0001(name) values('zhangsan');
+select * from schema_ident_current_0001.t_identity_0001;
+ id  |   name   
+-----+----------
+ 101 | zhangsan
+(1 row)
+
+select ident_current('schema_ident_current_0001.t_identity_0001');
+ ident_current 
+---------------
+           101
+(1 row)
+
+drop table schema_ident_current_0001.t_identity_0001;
+drop schema schema_ident_current_0001 cascade;
+create table t_identity_0033(c1 decimal identity(100,1), c2 varchar(100));
+NOTICE:  CREATE TABLE will create implicit sequence "t_identity_0033_c1_seq_identity" for serial column "t_identity_0033.c1"
+insert into t_identity_0033(c2) values ('a');
+insert into t_identity_0033(c2) values ('b');
+insert into t_identity_0033(c2) values ('c');
+select * from t_identity_0033;
+ c1  | c2 
+-----+----
+ 100 | a
+ 101 | b
+ 102 | c
+(3 rows)
+
+select ident_current('t_identity_0033');
+ ident_current 
+---------------
+           102
+(1 row)
+
+create table t_identity_0033_01(c1 numeric identity(100,1), c2 varchar(100));
+NOTICE:  CREATE TABLE will create implicit sequence "t_identity_0033_01_c1_seq_identity" for serial column "t_identity_0033_01.c1"
+insert into t_identity_0033_01(c2) values ('a');
+insert into t_identity_0033_01(c2) values ('b');
+insert into t_identity_0033_01(c2) values ('c');
+select * from t_identity_0033_01;
+ c1  | c2 
+-----+----
+ 100 | a
+ 101 | b
+ 102 | c
+(3 rows)
+
+select ident_current('t_identity_0033_01');
+ ident_current 
+---------------
+           102
+(1 row)
+
+create table t_identity_0033_02(c1 number identity(100,1), c2 varchar(100));
+NOTICE:  CREATE TABLE will create implicit sequence "t_identity_0033_02_c1_seq_identity" for serial column "t_identity_0033_02.c1"
+insert into t_identity_0033_02(c2) values ('a');
+insert into t_identity_0033_02(c2) values ('b');
+insert into t_identity_0033_02(c2) values ('c');
+select * from t_identity_0033_02;
+ c1  | c2 
+-----+----
+ 100 | a
+ 101 | b
+ 102 | c
+(3 rows)
+
+select ident_current('t_identity_0033_02');
+ ident_current 
+---------------
+           102
+(1 row)
+
+drop table t_identity_0033;
+drop table t_identity_0033_01;
+drop table t_identity_0033_02;
+drop table if exists t_ident_current0001_01;
+NOTICE:  table "t_ident_current0001_01" does not exist, skipping
+drop table if exists t_ident_current0001_02;
+NOTICE:  table "t_ident_current0001_02" does not exist, skipping
+create table t_ident_current0001_01(id int identity(100,1) primary key, name varchar(10));
+NOTICE:  CREATE TABLE will create implicit sequence "t_ident_current0001_01_id_seq_identity" for serial column "t_ident_current0001_01.id"
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "t_ident_current0001_01_pkey" for table "t_ident_current0001_01"
+CREATE TABLE t_ident_current0001_02 (log_id int identity PRIMARY KEY, log_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, table_name TEXT, last_identity BIGINT unique);
+NOTICE:  CREATE TABLE will create implicit sequence "t_ident_current0001_02_log_id_seq_identity" for serial column "t_ident_current0001_02.log_id"
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "t_ident_current0001_02_pkey" for table "t_ident_current0001_02"
+NOTICE:  CREATE TABLE / UNIQUE will create implicit index "t_ident_current0001_02_last_identity_key" for table "t_ident_current0001_02"
+INSERT INTO t_ident_current0001_02 (table_name, last_identity) SELECT 't_ident_current0001_01', ident_current('t_ident_current0001_01');
+select log_id, table_name, last_identity from t_ident_current0001_02;
+ log_id |       table_name       | last_identity 
+--------+------------------------+---------------
+      1 | t_ident_current0001_01 |           100
+(1 row)
+
+drop table if exists t_ident_current0001_01;
+drop table if exists t_ident_current0001_02;
+create table t_ident_current0001_01(id int identity(100,1) primary key, name varchar(10));
+NOTICE:  CREATE TABLE will create implicit sequence "t_ident_current0001_01_id_seq_identity" for serial column "t_ident_current0001_01.id"
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "t_ident_current0001_01_pkey" for table "t_ident_current0001_01"
+CREATE TABLE t_ident_current0001_02 (log_id int identity PRIMARY KEY, log_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, table_name TEXT, last_identity BIGINT);
+NOTICE:  CREATE TABLE will create implicit sequence "t_ident_current0001_02_log_id_seq_identity" for serial column "t_ident_current0001_02.log_id"
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "t_ident_current0001_02_pkey" for table "t_ident_current0001_02"
+INSERT INTO t_ident_current0001_02 (table_name, last_identity) SELECT 't_ident_current0001_01', ident_current('t_ident_current0001_01');
+select log_id, table_name, last_identity from t_ident_current0001_02;
+ log_id |       table_name       | last_identity 
+--------+------------------------+---------------
+      1 | t_ident_current0001_01 |           100
+(1 row)
+
+INSERT INTO t_ident_current0001_02 (table_name, last_identity) SELECT 'hr', ident_current('t_ident_current0001_01');
+select log_id, table_name, last_identity from t_ident_current0001_02;
+ log_id |       table_name       | last_identity 
+--------+------------------------+---------------
+      1 | t_ident_current0001_01 |           100
+      2 | hr                     |           100
+(2 rows)
+
+drop table t_ident_current0001_01;
+drop table t_ident_current0001_02;
+CREATE TABLE Employees (EmployeeID INT IDENTITY(1,1) PRIMARY KEY, FirstName NVARCHAR(50), LastName NVARCHAR(50) );
+NOTICE:  CREATE TABLE will create implicit sequence "employees_employeeid_seq_identity" for serial column "employees.employeeid"
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "employees_pkey" for table "employees"
+CREATE VIEW v_Employees AS SELECT EmployeeID, FirstName, LastName FROM Employees;
+INSERT INTO Employees (FirstName, LastName) VALUES ('John', 'Doe');
+INSERT INTO Employees (FirstName, LastName) VALUES ('Jane', 'Smith');
+select * from Employees;
+ employeeid | firstname | lastname 
+------------+-----------+----------
+          1 | John      | Doe
+          2 | Jane      | Smith
+(2 rows)
+
+select * from v_Employees;
+ employeeid | firstname | lastname 
+------------+-----------+----------
+          1 | John      | Doe
+          2 | Jane      | Smith
+(2 rows)
+
+SELECT IDENT_CURRENT('Employees');
+ ident_current 
+---------------
+             2
+(1 row)
+
+SELECT IDENT_CURRENT('v_Employees');
+ ident_current 
+---------------
+              
+(1 row)
+
+drop table Employees cascade;
+NOTICE:  drop cascades to view v_employees
+reset search_path;
+drop schema test_ident_current;
+drop schema functions_test cascade;
+-- test datefuncs
+--test dateadd
+select dateadd(hh,1,timestamp'1997-12-31 23:59:59');
+         dateadd          
+--------------------------
+ Thu Jan 01 00:59:59 1998
+(1 row)
+
+select dateadd(dd,1,timestamp'1997-12-31 23:59:59');
+         dateadd          
+--------------------------
+ Thu Jan 01 23:59:59 1998
+(1 row)
+
+select dateadd(mm,1,timestamp'1997-12-31 23:59:59');
+         dateadd          
+--------------------------
+ Sat Jan 31 23:59:59 1998
+(1 row)
+
+select dateadd(yy,1,timestamp'1997-12-31 23:59:59');
+         dateadd          
+--------------------------
+ Thu Dec 31 23:59:59 1998
+(1 row)
+
+select dateadd(qq,1,timestamp'1997-12-31 23:59:59');
+         dateadd          
+--------------------------
+ Tue Mar 31 23:59:59 1998
+(1 row)
+
+select dateadd(ww,1,timestamptz'1997-12-31 23:59:59');
+           dateadd            
+------------------------------
+ Wed Jan 07 23:59:59 1998 PST
+(1 row)
+
+select dateadd(mi,1,timestamptz'1997-12-31 23:59:59');
+           dateadd            
+------------------------------
+ Thu Jan 01 00:00:59 1998 PST
+(1 row)
+
+select dateadd(ss,1,timestamp'1997-12-31 23:59:59');
+         dateadd          
+--------------------------
+ Thu Jan 01 00:00:00 1998
+(1 row)
+
+select dateadd(ms,1,timestamp'1997-12-31 23:59:59');
+           dateadd            
+------------------------------
+ Wed Dec 31 23:59:59.001 1997
+(1 row)
+
+select dateadd(mcs,1,timestamp'1997-12-31 23:59:59');
+             dateadd             
+---------------------------------
+ Wed Dec 31 23:59:59.000001 1997
+(1 row)
+
+select dateadd(mcs,999999,timestamp'1997-12-31 23:59:59.000002');
+             dateadd             
+---------------------------------
+ Thu Jan 01 00:00:00.000001 1998
+(1 row)
+
+select dateadd(mm,1,date'1998-01-30');
+         dateadd          
+--------------------------
+ Sat Feb 28 00:00:00 1998
+(1 row)
+
+select dateadd(dd,2,time'23:20:20');
+         dateadd          
+--------------------------
+ Wed Jan 03 23:20:20 1900
+(1 row)
+
+select dateadd(dd,3,timetz '23:20:20');
+           dateadd            
+------------------------------
+ Thu Jan 04 22:20:20 1900 PST
+(1 row)
+
+select dateadd(dy,2,time'23:20:20');
+         dateadd          
+--------------------------
+ Wed Jan 03 23:20:20 1900
+(1 row)
+
+select dateadd(dw,2,time'23:20:20');
+         dateadd          
+--------------------------
+ Wed Jan 03 23:20:20 1900
+(1 row)
+
+select dateadd(yy,2,time'23:20:20');
+         dateadd          
+--------------------------
+ Wed Jan 01 23:20:20 1902
+(1 row)
+
+select dateadd(mm,2,time'23:20:20');
+         dateadd          
+--------------------------
+ Thu Mar 01 23:20:20 1900
+(1 row)
+
+select dateadd('',1,'2023/3/31');
+ERROR:  unrecognized role option ""
+CONTEXT:  referenced column: dateadd
+select dateadd(2022,3,'2023/3/31 11:25:35.123456789');
+ERROR:  function dateadd(integer, integer, unknown) does not exist
+LINE 1: select dateadd(2022,3,'2023/3/31 11:25:35.123456789');
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+CONTEXT:  referenced column: dateadd
+drop table t;
+ERROR:  table "t" does not exist
+create table t(id timestamp, id1 int,id2 int);
+insert into t values(timestamp'1997-12-11',1,2);
+select dateadd(dd,t.id1,id)from t;
+         dateadd          
+--------------------------
+ Fri Dec 12 00:00:00 1997
+(1 row)
+
+select dateadd(mm,t.id1,id)from t;
+         dateadd          
+--------------------------
+ Sun Jan 11 00:00:00 1998
+(1 row)
+
+select dateadd(dd,id1+id1,id)from t;
+         dateadd          
+--------------------------
+ Sat Dec 13 00:00:00 1997
+(1 row)
+
+select dateadd(dd,id1+id1+id2,id)from t;
+         dateadd          
+--------------------------
+ Mon Dec 15 00:00:00 1997
+(1 row)
+
+select dateadd(dd,id1+id1+(id2 -id2),id)from t;
+         dateadd          
+--------------------------
+ Sat Dec 13 00:00:00 1997
+(1 row)
+
+select dateadd(dd,(id1+id1+(id2 -id2)),id)from t;
+         dateadd          
+--------------------------
+ Sat Dec 13 00:00:00 1997
+(1 row)
+
+select dateadd(dd,id1,id)from t;
+         dateadd          
+--------------------------
+ Fri Dec 12 00:00:00 1997
+(1 row)
+
+drop table t;
+--test datepart
+SELECT DATEPART(year,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+     2007
+(1 row)
+
+SELECT DATEPART(quarter,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+        4
+(1 row)
+
+SELECT DATEPART(month,timestamptz'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+       10
+(1 row)
+
+SELECT DATEPART(dayofyear,timestamptz'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+      303
+(1 row)
+
+SELECT DATEPART(day,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+       30
+(1 row)
+
+SELECT DATEPART(week,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+       44
+(1 row)
+
+SELECT DATEPART(weekday,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+        3
+(1 row)
+
+SELECT DATEPART(hour,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+       12
+(1 row)
+
+SELECT DATEPART(minute,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+       15
+(1 row)
+
+SELECT DATEPART(second,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+       32
+(1 row)
+
+SELECT DATEPART(millisecond,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+      123
+(1 row)
+
+SELECT DATEPART(microsecond,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+   123457
+(1 row)
+
+SELECT DATEPART(nanosecond,timestamp'2007-10-30 12:15:32.1234567');
+ datepart  
+-----------
+ 123457000
+(1 row)
+
+SELECT DATEPART(iso_week,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+       44
+(1 row)
+
+SELECT DATEPART(ISOWW,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+       44
+(1 row)
+
+SELECT DATEPART(ISOWK,timestamp'2007-10-30 12:15:32.1234567');
+ datepart 
+----------
+       44
+(1 row)
+
+SELECT DATEPART(year,date'2007-10-30');
+ datepart 
+----------
+     2007
+(1 row)
+
+SELECT DATEPART(year,time'23:20:20');
+ datepart 
+----------
+     1900
+(1 row)
+
+SELECT DATEPART(year,timetz'23:20:20');
+ datepart 
+----------
+     1900
+(1 row)
+
+select datepart('','2023/3/31');
+ERROR:  unrecognized role option ""
+CONTEXT:  referenced column: datepart
+select datepart(2022,'2023/3/31 11:25:35.123456789');
+ERROR:  function datepart(integer, unknown) does not exist
+LINE 1: select datepart(2022,'2023/3/31 11:25:35.123456789');
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+CONTEXT:  referenced column: datepart
+--test getdate
+select getdate();
+--?.*
+--?.*
+--?.*
+(1 row)
+
+select datepart(second,getdate());
+--?.*
+--?.*
+--?.*
+(1 row)
+
+select datepart(millisecond,getdate());
+--?.*
+--?.*
+--?.*
+(1 row)
+
+select datepart(microsecond,getdate());
+--?.*
+--?.*
+--?.*
+(1 row)
+
+select dateadd(d,1,getdate());
+--?.*
+--?.*
+--?.*
+(1 row)
+
+select dateadd(day,1,getdate());
+--?.*
+--?.*
+--?.*
+(1 row)
+
+select dateadd(hours,1,getdate());
+ERROR:  unrecognized role option "hours"
+CONTEXT:  referenced column: dateadd
+select dateadd("YEAR",1,getdate());
+--?.*
+--?.*
+--?.*
+(1 row)
+
+select datepart(HoUR,getdate());
+--?.*
+--?.*
+--?.*
+(1 row)
+
+select datepart(DAY,getdate());
+--?.*
+--?.*
+--?.*
+(1 row)
+
+select datepart("YEAR",getdate());
+--?.*
+--?.*
+--?.*
+(1 row)
+
+--test datename
+SELECT DATENAME(year,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 2007
+(1 row)
+
+SELECT DATENAME(quarter,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 4
+(1 row)
+
+SELECT DATENAME(mm,timestamp'2007-1-30 12:15:32.1234567');
+ datename 
+----------
+ January
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-2-28 12:15:32.1234567');
+ datename 
+----------
+ February
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-3-30 12:15:32.1234567');
+ datename 
+----------
+ March
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-4-30 12:15:32.1234567');
+ datename 
+----------
+ April
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-5-30 12:15:32.1234567');
+ datename 
+----------
+ May
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-6-30 12:15:32.1234567');
+ datename 
+----------
+ June
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-7-30 12:15:32.1234567');
+ datename 
+----------
+ July
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-8-30 12:15:32.1234567');
+ datename 
+----------
+ August
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-9-30 12:15:32.1234567');
+ datename  
+-----------
+ September
+(1 row)
+
+SELECT DATENAME(month,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ October
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-11-30 12:15:32.1234567');
+ datename 
+----------
+ November
+(1 row)
+
+SELECT DATENAME(m,timestamp'2007-12-30 12:15:32.1234567');
+ datename 
+----------
+ December
+(1 row)
+
+SELECT DATENAME(dayofyear,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 303
+(1 row)
+
+SELECT DATENAME(day,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 30
+(1 row)
+
+SELECT DATENAME(week,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 44
+(1 row)
+
+SELECT DATENAME(weekday,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ Tuesday
+(1 row)
+
+SELECT DATENAME(dw,timestamp'2007-10-29 12:15:32.1234567');
+ datename 
+----------
+ Monday
+(1 row)
+
+SELECT DATENAME(w,timestamp'2007-10-28 12:15:32.1234567');
+ datename 
+----------
+ Sunday
+(1 row)
+
+SELECT DATENAME(w,timestamp'2007-10-27 12:15:32.1234567');
+ datename 
+----------
+ Saturday
+(1 row)
+
+SELECT DATENAME(w,timestamp'2007-10-26 12:15:32.1234567');
+ datename 
+----------
+ Friday
+(1 row)
+
+SELECT DATENAME(w,timestamp'2007-10-25 12:15:32.1234567');
+ datename 
+----------
+ Thursday
+(1 row)
+
+SELECT DATENAME(w,timestamp'2007-10-24 12:15:32.1234567');
+ datename  
+-----------
+ Wednesday
+(1 row)
+
+SELECT DATENAME(hour,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 12
+(1 row)
+
+SELECT DATENAME(minute,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 15
+(1 row)
+
+SELECT DATENAME(second,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 32
+(1 row)
+
+SELECT DATENAME(millisecond,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 123
+(1 row)
+
+SELECT DATENAME(microsecond,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 123457
+(1 row)
+
+SELECT DATENAME(nanosecond,timestamp'2007-10-30 12:15:32.1234567');
+ datename  
+-----------
+ 123457000
+(1 row)
+
+SELECT DATENAME(TZoffset,'2007-10-30 12:15:32.1234567 -05:10');
+ datename 
+----------
+ -07:00
+(1 row)
+
+SELECT DATENAME(ISO_WEEK,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 44
+(1 row)
+
+SELECT DATENAME(ISOWW,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 44
+(1 row)
+
+SELECT DATENAME(ISOWK,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ 44
+(1 row)
+
+SELECT DATENAME(TZoffset,timestamp'2007-10-30 12:15:32.1234567');
+ datename 
+----------
+ +00;00
+(1 row)
+
+SELECT DATENAME(year, time'12:10:30.123');
+ datename 
+----------
+ 1900
+(1 row)
+
+SELECT DATENAME(month, time'12:10:30.123');
+ datename 
+----------
+ January
+(1 row)
+
+SELECT DATENAME(day, time'12:10:30.123');
+ datename 
+----------
+ 1
+(1 row)
+
+SELECT DATENAME(dayofyear, time'12:10:30.123');
+ datename 
+----------
+ 1
+(1 row)
+
+SELECT DATENAME(weekday, time'12:10:30.123');
+ datename 
+----------
+ Monday
+(1 row)
+
+SELECT DATENAME(weekday, timetz'12:10:30.123');
+ datename 
+----------
+ Monday
+(1 row)
+
+SELECT DATENAME(weekday, date'2007-10-30');
+ datename 
+----------
+ Tuesday
+(1 row)
+
+create view testv as select DATENAME(weekday, date'2007-10-30');
+\d+ testv;
+                        View "public.testv"
+  Column  |       Type        | Modifiers | Storage  | Description 
+----------+-------------------+-----------+----------+-------------
+ datename | character varying |           | extended | 
+View definition:
+ SELECT datename('weekday'::cstring, '10-30-2007'::date) AS datename;
+
+select * from testv;
+ datename 
+----------
+ Tuesday
+(1 row)
+
+SELECT datename('weekday'::cstring, '10-30-2007'::date) AS datename;
+ datename 
+----------
+ Tuesday
+(1 row)
+
+drop view testv;
+--test len
+SELECT LEN(N'123');
+ len 
+-----
+   3
+(1 row)
+
+SELECT LEN(N'123   ');
+ len 
+-----
+   3
+(1 row)
+
+SELECT LEN(N'   123   ');
+ len 
+-----
+   6
+(1 row)
+
+SELECT LEN(CAST('123' as char(25)));
+ len 
+-----
+   3
+(1 row)
+
+SELECT LEN('abc');
+ len 
+-----
+   3
+(1 row)
+
+SELECT LEN('12345678901234567890123456789012345'::varchar);
+ len 
+-----
+  35
+(1 row)
+
+select len('aa'::varbinary);
+ len 
+-----
+   2
+(1 row)
+

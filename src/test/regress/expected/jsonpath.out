@@ -1,0 +1,666 @@
+DROP SCHEMA IF EXISTS test_jsonpath CASCADE;
+NOTICE:  schema "test_jsonpath" does not exist, skipping
+CREATE SCHEMA test_jsonpath;
+SET CURRENT_SCHEMA TO test_jsonpath ;
+CREATE TABLE t (name VARCHAR2(100));
+INSERT INTO t VALUES ('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]');
+INSERT INTO t VALUES ('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]');
+INSERT INTO t VALUES ('[{"first":"Mary"}, {"last":"Jones"}]');
+INSERT INTO t VALUES ('[{"first":"Jeff"}, {"last":"Williams"}]');
+INSERT INTO t VALUES ('[{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]');
+INSERT INTO t VALUES ('[{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]');
+INSERT INTO t VALUES ('[{"first":1}, {"middle":2}, {"last":3}]');
+INSERT INTO t VALUES (NULL);
+INSERT INTO t VALUES ('This is not well-formed JSON data');
+CREATE TABLE families (family_doc CLOB);
+INSERT INTO families
+VALUES ('{"family" : {"id":10, "ages":[40,38,12], "address" : {"street" : "10 Main Street"}}}');
+INSERT INTO families
+VALUES ('{"family" : {"id":11, "ages":[42,40,10,5], "address" : {"street" : "200 East Street", "apt" : 20}}}');
+INSERT INTO families
+VALUES ('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}');
+INSERT INTO families VALUES ('This is not well-formed JSON data');
+-- JsonPath grammar
+SELECT name FROM t WHERE JSON_EXISTS(name, '$');
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(7 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[0]');
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(7 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[*]');
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(7 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[99]');
+ name 
+------
+(0 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[0,2]');
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(7 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[2,0,1]'); 
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(7 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[0 to 2]');
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(7 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[3 to 3]');
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+(3 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[2 to 0]');
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(7 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[2].*.*');
+ name 
+------
+(0 rows)
+
+SELECT family_doc FROM families WHERE JSON_EXISTS(family_doc, '$.family');
+                                             family_doc                                              
+-----------------------------------------------------------------------------------------------------
+ {"family" : {"id":10, "ages":[40,38,12], "address" : {"street" : "10 Main Street"}}}
+ {"family" : {"id":11, "ages":[42,40,10,5], "address" : {"street" : "200 East Street", "apt" : 20}}}
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(3 rows)
+
+SELECT family_doc FROM families WHERE JSON_EXISTS(family_doc, '$.*');
+                                             family_doc                                              
+-----------------------------------------------------------------------------------------------------
+ {"family" : {"id":10, "ages":[40,38,12], "address" : {"street" : "10 Main Street"}}}
+ {"family" : {"id":11, "ages":[42,40,10,5], "address" : {"street" : "200 East Street", "apt" : 20}}}
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(3 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[3][1]');
+                                name                                
+--------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+(1 row)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[1].last');
+                  name                   
+-----------------------------------------
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+(2 rows)
+
+SELECT family_doc FROM families WHERE JSON_EXISTS(family_doc, '$.family.address.apt');
+                                             family_doc                                              
+-----------------------------------------------------------------------------------------------------
+ {"family" : {"id":11, "ages":[42,40,10,5], "address" : {"street" : "200 East Street", "apt" : 20}}}
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(2 rows)
+
+SELECT family_doc FROM families WHERE JSON_EXISTS(family_doc, '$.family.ages[2]');
+                                             family_doc                                              
+-----------------------------------------------------------------------------------------------------
+ {"family" : {"id":10, "ages":[40,38,12], "address" : {"street" : "10 Main Street"}}}
+ {"family" : {"id":11, "ages":[42,40,10,5], "address" : {"street" : "200 East Street", "apt" : 20}}}
+(2 rows)
+
+-- syntax error in jsonpath
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[-1]');
+ERROR:  syntax error in json path expression
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[0b10]');
+ERROR:  syntax error in json path expression
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[1');
+ERROR:  syntax error in json path expression
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[1+2]');
+ERROR:  syntax error in json path expression
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[0.1]');
+ERROR:  syntax error in json path expression
+SELECT name FROM t WHERE JSON_EXISTS(name, 'NULL');
+ERROR:  syntax error in json path expression
+SELECT name FROM t WHERE JSON_EXISTS(name, NULL);
+ERROR:  the json path expression is not of text type
+drop table if exists t_JsonExists_Case0009;
+NOTICE:  table "t_jsonexists_case0009" does not exist, skipping
+CREATE TABLE t_JsonExists_Case0009( col1 VARCHAR2 (2000));
+INSERT INTO t_JsonExists_Case0009 VALUES (null);
+select col1 from t_JsonExists_Case0009 where json_exists(col1,' ');
+ERROR:  syntax error in json path expression
+select col1 from t_JsonExists_Case0009 where json_exists(col1,' ' FALSE on ERROR);
+ERROR:  syntax error in json path expression
+select col1 from t_JsonExists_Case0009 where json_exists(col1,' ' TRUE on ERROR);
+ERROR:  syntax error in json path expression
+select col1 from t_JsonExists_Case0009 where json_exists(col1,' ' ERROR on ERROR);
+ERROR:  syntax error in json path expression
+drop table t_JsonExists_Case0009;
+-- json_exists
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[0].first');
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(7 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[1,2].last');
+                                name                                
+--------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(6 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[1 to 2].last');
+                                name                                
+--------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(6 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[1].first');
+ name 
+------
+(0 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$[0].first[1]');
+ name 
+------
+(0 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(NULL, '$');
+ name 
+------
+(0 rows)
+
+SELECT JSON_EXISTS('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}]', '$[0].first');
+ json_exists 
+-------------
+ t
+(1 row)
+
+SELECT JSON_EXISTS('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}]', '$[2 to 1].*');
+ json_exists 
+-------------
+ t
+(1 row)
+
+SELECT JSON_EXISTS('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}]', '$[*].last');
+ json_exists 
+-------------
+ t
+(1 row)
+
+SELECT JSON_EXISTS('This is not well-formed JSON data', '$[0].first');
+ json_exists 
+-------------
+ f
+(1 row)
+
+-- json_exists with on error
+SELECT name FROM t WHERE JSON_EXISTS(name, '$' FALSE ON ERROR);
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+(7 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$' TRUE ON ERROR);
+                                    name                                     
+-----------------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, 1]
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}, [1, 2, 3]]
+ [{"first":"Mary"}, {"last":"Jones"}]
+ [{"first":"Jeff"}, {"last":"Williams"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"last":"Brown"}]
+ [{"first":"Jean"}, {"middle":"Anne"}, {"middle":"Alice"}, {"last":"Brown"}]
+ [{"first":1}, {"middle":2}, {"last":3}]
+ This is not well-formed JSON data
+(8 rows)
+
+SELECT name FROM t WHERE JSON_EXISTS(name, '$' ERROR ON ERROR);
+ERROR:  the input is not a well-formed json data
+SELECT JSON_EXISTS('This is not well-formed JSON data', '$[0].first' FALSE ON ERROR);
+ json_exists 
+-------------
+ f
+(1 row)
+
+SELECT JSON_EXISTS('This is not well-formed JSON data', '$[0].first' TRUE ON ERROR);
+ json_exists 
+-------------
+ t
+(1 row)
+
+SELECT JSON_EXISTS('This is not well-formed JSON data', '$[0].first' ERROR ON ERROR);
+ERROR:  the input is not a well-formed json data
+CONTEXT:  referenced column: json_exists
+select json_exists('{"name":"胡小威" , "age":20 , "male":true}','$[0].name'); -- t
+ json_exists 
+-------------
+ t
+(1 row)
+
+select json_exists('{"name":"胡小威" , "age":20 , "male":true}','$[1].name'); -- f
+ json_exists 
+-------------
+ f
+(1 row)
+
+select json_exists('{"name":"胡小威" , "age":20 , "male":true}','$.name[0]'); -- t
+ json_exists 
+-------------
+ t
+(1 row)
+
+select json_exists('{"name":"胡小威" , "age":20 , "male":true}','$.name[0][0,1][0 to 3][0]'); -- t
+ json_exists 
+-------------
+ t
+(1 row)
+
+select json_exists('{"name":"胡小威" , "age":20 , "male":true}','$.name[0][0,1][1 to 3][0]'); -- f
+ json_exists 
+-------------
+ f
+(1 row)
+
+SELECT JSON_EXISTS('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}]', '$.first'); -- t
+ json_exists 
+-------------
+ t
+(1 row)
+
+SELECT JSON_EXISTS('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}]', '$.first[0][0][0][0]'); -- t
+ json_exists 
+-------------
+ t
+(1 row)
+
+PREPARE stmt1 AS SELECT JSON_EXISTS($1,$2);
+EXECUTE stmt1('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}]','$[0].first');
+ json_exists 
+-------------
+ t
+(1 row)
+
+EXECUTE stmt1('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}]','$[0].last');
+ json_exists 
+-------------
+ f
+(1 row)
+
+EXECUTE stmt1('This is not well-formed JSON data','$[0].last');
+ json_exists 
+-------------
+ f
+(1 row)
+
+DEALLOCATE PREPARE stmt1;
+PREPARE stmt1 AS SELECT JSON_EXISTS($1,$2 TRUE ON ERROR);
+EXECUTE stmt1('This is not well-formed JSON data','$[0].last');
+ json_exists 
+-------------
+ t
+(1 row)
+
+DEALLOCATE PREPARE stmt1;
+PREPARE stmt1 AS SELECT JSON_EXISTS($1,$2 FALSE ON ERROR);
+EXECUTE stmt1('This is not well-formed JSON data','$[0].last');
+ json_exists 
+-------------
+ f
+(1 row)
+
+DEALLOCATE PREPARE stmt1;
+PREPARE stmt1 AS SELECT JSON_EXISTS($1,$2 ERROR ON ERROR);
+EXECUTE stmt1('This is not well-formed JSON data','$[0].last');
+ERROR:  the input is not a well-formed json data
+CONTEXT:  referenced column: json_exists
+DEALLOCATE PREPARE stmt1;
+-- json_textcontains
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family', '10');
+                                             family_doc                                              
+-----------------------------------------------------------------------------------------------------
+ {"family" : {"id":10, "ages":[40,38,12], "address" : {"street" : "10 Main Street"}}}
+ {"family" : {"id":11, "ages":[42,40,10,5], "address" : {"street" : "200 East Street", "apt" : 20}}}
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(3 rows)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family', '25, 5');
+                                             family_doc                                              
+-----------------------------------------------------------------------------------------------------
+ {"family" : {"id":11, "ages":[42,40,10,5], "address" : {"street" : "200 East Street", "apt" : 20}}}
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(2 rows)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family', 'West');
+ family_doc 
+------------
+(0 rows)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family', 'Oak Street');
+                                          family_doc                                           
+-----------------------------------------------------------------------------------------------
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(1 row)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family', 'oak street');
+                                          family_doc                                           
+-----------------------------------------------------------------------------------------------
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(1 row)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family', '25 23, Oak Street');
+                                          family_doc                                           
+-----------------------------------------------------------------------------------------------
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(1 row)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family', 'Oak Street 10');
+                                          family_doc                                           
+-----------------------------------------------------------------------------------------------
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(1 row)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family', '12 25 23 300 Oak Street 10');
+                                          family_doc                                           
+-----------------------------------------------------------------------------------------------
+ {"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}
+(1 row)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family.id', 'Oak Street');
+ family_doc 
+------------
+(0 rows)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.family', 'ak street');
+ family_doc 
+------------
+(0 rows)
+
+drop table if exists json_data1;
+NOTICE:  table "json_data1" does not exist, skipping
+CREATE TABLE json_data1(json_col CLOB);  
+INSERT INTO json_data1 VALUES ('{"name":"web"}');
+select * from json_data1 where json_textcontains(json_col,'$.site','nothing');
+ json_col 
+----------
+(0 rows)
+
+drop table json_data1;
+PREPARE stmt2 AS SELECT JSON_TEXTCONTAINS($1, $2, $3);
+EXECUTE stmt2(NULL, '$.family', 'data');
+ json_textcontains 
+-------------------
+ 
+(1 row)
+
+EXECUTE stmt2('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}'
+             , '$.family', '12');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+EXECUTE stmt2('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}'
+             , '$.family', 'K STREET');
+ json_textcontains 
+-------------------
+ f
+(1 row)
+
+EXECUTE stmt2('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}'
+            , NULL, 'data');
+ERROR:  the json path expression is not of text type
+CONTEXT:  referenced column: json_textcontains
+drop table families;
+CREATE TABLE families (family_doc CLOB);
+INSERT INTO families VALUES ('{"ages":[11,40,10]}');
+INSERT INTO families VALUES ('{"ages":[12,38,10]}');
+INSERT INTO families VALUES ('{"ages":[40,38,10]}');
+INSERT INTO families VALUES ('{"ages":[40,48,10]}');
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.ages', '12,40');
+     family_doc      
+---------------------
+ {"ages":[11,40,10]}
+ {"ages":[12,38,10]}
+ {"ages":[40,38,10]}
+ {"ages":[40,48,10]}
+(4 rows)
+
+SELECT family_doc FROM families WHERE JSON_TEXTCONTAINS(family_doc, '$.ages', '0');
+ family_doc 
+------------
+(0 rows)
+
+SELECT JSON_TEXTCONTAINS('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}', '$.family', 'Oak Street## 10');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+SELECT JSON_TEXTCONTAINS('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "!@$%300 Oak Street", "apt" : 10}}}', '$.family', '300%@ Oak Street## 10');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+SELECT JSON_TEXTCONTAINS('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "!@$%300 Oak Street", "apt" : 10}}}', '$.family', '300%@00 Oak Street## 10');
+ json_textcontains 
+-------------------
+ f
+(1 row)
+
+SELECT JSON_TEXTCONTAINS('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "!@$%300 Oak Street", "apt" : 10}}}', '$.family', '     Oak    ');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+SELECT JSON_TEXTCONTAINS('This is not well-formed JSON data', '$.family', 'data');
+ json_textcontains 
+-------------------
+ f
+(1 row)
+
+SELECT JSON_TEXTCONTAINS(NULL, '$.family', 'data');
+ json_textcontains 
+-------------------
+ 
+(1 row)
+
+SELECT JSON_TEXTCONTAINS('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}'
+                        , '$.family', '12');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+SELECT JSON_TEXTCONTAINS('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}'
+                        , '$.family', '12, OAK STREET');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+SELECT JSON_TEXTCONTAINS('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}'
+                        , '$.family', 'K STREET');
+ json_textcontains 
+-------------------
+ f
+(1 row)
+
+SELECT JSON_TEXTCONTAINS('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}'
+                        , NULL, 'data');
+ERROR:  the json path expression is not of text type
+CONTEXT:  referenced column: json_textcontains
+select json_textcontains('{ "zebra" : { "name" : "Marty",   
+                       "stripes" : ["Black","White"],  
+                       "handler" : "Bob" }}','$','Marty');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+select json_textcontains('{ "zebra" : { "name" : "Marty",   
+                       "stripes" : ["Black","White"],  
+                       "handler" : "Bob" }}','$.zebra.name','Marty');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+select json_textcontains('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}',
+                         '$.family.address.street','300');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+select json_textcontains('{
+    "name":"web",
+    "num":3,
+    "sites": [
+        { "name":"Google", "info":[ "Android", "Google Search", "Googlee" ] },
+        { "name":"Runoob", "info":[ "book", "tool", "wechat" ] },
+        { "name":"Taobao", "info":[ "taobao", "shop" ] }
+    ]
+}', '$.sites.info.name','shop');
+ json_textcontains 
+-------------------
+ f
+(1 row)
+
+select json_textcontains('{
+    "name":"web",
+    "num":3,
+    "sites": [
+        { "name":"Google", "info":[[ {"name":"Android"}, {"name":"Google Search"}, {"name":"Googlee"} ]] },
+        { "name":"Runoob", "info":[[ {"name":"book"}, {"name":"tool"}, "wechat" ]] },
+        { "name":"Taobao", "info":[[ {"name":"taobao"}, "shop" ]] }
+    ]
+}', '$.sites.info.name','Androidd,Search,Googlee');
+ json_textcontains 
+-------------------
+ t
+(1 row)
+
+create or replace procedure p_JsonTextcontains_Case0011(col1 text,col2 text,col3 text)
+as
+val1 bool;
+begin
+val1=json_textcontains(col1,col2,col3);--强转成cstring
+raise notice 'result=%',val1;
+end;
+/
+call p_JsonTextcontains_Case0011('{"family" : {"id":12, "ages":[25,23], "address" : {"street" : "300 Oak Street", "apt" : 10}}}',
+                                 '$.family','25,38');
+NOTICE:  result=t
+ p_jsontextcontains_case0011 
+-----------------------------
+ 
+(1 row)
+
+drop table if exists t_JsonExists_Case0006;
+NOTICE:  table "t_jsonexists_case0006" does not exist, skipping
+CREATE TABLE t_JsonExists_Case0006(po_document VARCHAR2 (2000));
+INSERT INTO t_JsonExists_Case0006
+  VALUES ('[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}]');
+INSERT INTO t_JsonExists_Case0006
+  VALUES ('{
+  "name":[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}],
+  "age":[{"John":"20"}, {"Mark":"35"}, {"Smith":"29"}]
+}'); 
+SELECT po.po_document FROM t_JsonExists_Case0006 po WHERE json_exists(po.po_document,'$[0][0]');
+                            po_document                            
+-------------------------------------------------------------------
+ [{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}]
+ {                                                                +
+   "name":[{"first":"John"}, {"middle":"Mark"}, {"last":"Smith"}],+
+   "age":[{"John":"20"}, {"Mark":"35"}, {"Smith":"29"}]           +
+ }
+(2 rows)
+
+drop table t_JsonExists_Case0006;
+DROP SCHEMA test_jsonpath CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to table t
+drop cascades to table families
+drop cascades to function p_jsontextcontains_case0011(text,text,text)
