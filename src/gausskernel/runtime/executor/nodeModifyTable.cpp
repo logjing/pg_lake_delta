@@ -86,6 +86,8 @@
 #include "access/heapam.h"
 #include "access/ustore/knl_uheap.h"
 #include "access/ustore/knl_whitebox_test.h"
+#include "catalog/pg_delta_table.h"
+#include "foreign/foreign.h"
 #ifdef ENABLE_HTAP
 #include "access/htap/imcstore_delta.h"
 #endif
@@ -1218,17 +1220,36 @@ TupleTableSlot* ExecInsertT(ModifyTableState* state, TupleTableSlot* slot, Tuple
         }
 #endif
         /*
-         * insert into foreign table: let the FDW do it
+         * 如果是 Iceberg 外表且有 Delta 表映射，将 INSERT 重定向到 Delta 内表。
+         * 否则走原有的 FDW ExecForeignInsert 路径。
          */
-        slot = result_rel_info->ri_FdwRoutine->ExecForeignInsert(estate, result_rel_info, slot, planSlot);
-
-        if (slot == NULL) {
-            /* "do nothing" */
-            return NULL;
+        bool icebergRouted = false;
+        if (isIcebergFDWFromTblOid(RelationGetRelid(result_relation_desc))) {
+            Oid deltaOid = LookupDeltaTableByForeignOid(RelationGetRelid(result_relation_desc));
+            if (OidIsValid(deltaOid)) {
+                Relation deltaRel = heap_open(deltaOid, RowExclusiveLock);
+                tableam_tslot_getallattrs(slot);
+                HeapTuple newTuple = heap_form_tuple(RelationGetDescr(deltaRel),
+                    slot->tts_values, slot->tts_isnull);
+                heap_insert(deltaRel, newTuple, estate->es_output_cid, 0, NULL);
+                heap_freetuple(newTuple);
+                heap_close(deltaRel, RowExclusiveLock);
+                icebergRouted = true;
+            }
         }
 
-        /* FDW might have changed tuple */
-        tuple = tableam_tslot_get_tuple_from_slot(result_rel_info->ri_RelationDesc, slot);
+        if (!icebergRouted) {
+            /* insert into foreign table: let the FDW do it */
+            slot = result_rel_info->ri_FdwRoutine->ExecForeignInsert(estate, result_rel_info, slot, planSlot);
+
+            if (slot == NULL) {
+                /* "do nothing" */
+                return NULL;
+            }
+
+            /* FDW might have changed tuple */
+            tuple = tableam_tslot_get_tuple_from_slot(result_rel_info->ri_RelationDesc, slot);
+        }
 
         new_id = InvalidOid;
     } else {
