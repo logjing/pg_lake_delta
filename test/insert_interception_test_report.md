@@ -24,7 +24,7 @@ CREATE FOREIGN TABLE t_iceberg (id INT, name TEXT, score FLOAT8)
 SERVER iceberg_server OPTIONS (location 's3://test-bucket/iceberg/t_iceberg/');
 
 -- t_delta OID = 16391（Delta 内表，schema 与外表一致）
-CREATE TABLE t_delta (id INT, name TEXT, score FLOAT8);
+CREATE TABLE t_delta (id INT, name TEXT, score FLOAT8) WITH (storage_engine = ustore);
 
 -- 注册映射
 SELECT register_delta_mapping(16391, 16388, 's3://test-bucket/iceberg/t_iceberg/');
@@ -34,7 +34,7 @@ SELECT register_delta_mapping(16391, 16388, 's3://test-bucket/iceberg/t_iceberg/
 
 ## Test 1：端到端 INSERT 截流
 
-**对应功能**：`ExecInsertT()` 中的 `isIcebergFDWFromTblOid` 检查 + `LookupDeltaTableByForeignOid` 查询 + `heap_insert` 到 Delta 表
+**对应功能**：`ExecInsertT()` 中的 `isIcebergFDWFromTblOid` 检查 + `LookupDeltaTableByForeignOid` 查询 + `tableam_tuple_insert` 到 Delta 内表(USTORE)
 
 **实际执行**：
 
@@ -182,7 +182,7 @@ ERROR:  cannot insert into foreign table "t_iceberg"
 ```sql
 CREATE FOREIGN TABLE t_iceberg2 (id INT, name TEXT, score FLOAT8)
 SERVER iceberg_server OPTIONS (location 's3://test-bucket/iceberg/t_iceberg2/');
-CREATE TABLE t_delta2 (id INT, name TEXT, score FLOAT8);
+CREATE TABLE t_delta2 (id INT, name TEXT, score FLOAT8) WITH (storage_engine = ustore);
 
 SELECT register_delta_mapping(
     (SELECT oid FROM pg_class WHERE relname = 't_delta2'),
@@ -234,8 +234,8 @@ INSERT INTO t_iceberg
   └─ ExecInsertT():
        ├─ isIcebergFDWFromTblOid(relid) → true
        ├─ LookupDeltaTableByForeignOid(relid) → 16391
-       ├─ heap_open(deltaOid) → heap_form_tuple → heap_insert
-       └─ 数据写入 t_delta
+       ├─ heap_open(deltaOid) → tableam_tslot_get_tuple_from_slot → tableam_tuple_insert
+       └─ 数据写入 t_delta (USTORE)
 ```
 
 ---
@@ -244,7 +244,7 @@ INSERT INTO t_iceberg
 
 | 限制 | 说明 |
 |------|------|
-| Delta 表约束不检查 | `heap_insert` 直接写入，跳过 `ExecConstraints`、`ExecInsertIndexTuples` 等，Delta 表上的 UNIQUE/NOT NULL/CHECK 约束不会生效 |
+| Delta 表约束不检查 | `tableam_tuple_insert` 直接写入，跳过 `ExecConstraints`、`ExecInsertIndexTuples` 等，Delta 表上的 UNIQUE/NOT NULL/CHECK 约束不会生效 |
 | schema 必须一致 | 外表和 Delta 表必须具有相同的列定义（列数、顺序、类型），否则 `heap_form_tuple` 可能失败 |
 | 仅支持 INSERT | UPDATE/DELETE 的截流暂未实现 |
 

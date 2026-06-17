@@ -1229,10 +1229,8 @@ TupleTableSlot* ExecInsertT(ModifyTableState* state, TupleTableSlot* slot, Tuple
             if (OidIsValid(deltaOid)) {
                 Relation deltaRel = heap_open(deltaOid, RowExclusiveLock);
                 tableam_tslot_getallattrs(slot);
-                HeapTuple newTuple = heap_form_tuple(RelationGetDescr(deltaRel),
-                    slot->tts_values, slot->tts_isnull);
-                heap_insert(deltaRel, newTuple, estate->es_output_cid, 0, NULL);
-                heap_freetuple(newTuple);
+                Tuple deltaTuple = tableam_tslot_get_tuple_from_slot(deltaRel, slot);
+                tableam_tuple_insert(deltaRel, deltaTuple, estate->es_output_cid, 0, NULL);
                 heap_close(deltaRel, RowExclusiveLock);
                 icebergRouted = true;
             }

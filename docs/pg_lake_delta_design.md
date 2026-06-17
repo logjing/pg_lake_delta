@@ -26,7 +26,7 @@ INSERT INTO t_iceberg (id, name, score) VALUES (1, 'alice', 95.5);
 │  nodeModifyTable.cpp: ExecInsertT()                 │
 │  isIcebergFDWFromTblOid() → true                    │
 │  LookupDeltaTableByForeignOid() → deltaOid           │
-│  heap_insert(deltaRel, tuple) → 写入 Delta 表        │
+│  tableam_tuple_insert(deltaRel, tuple) → 写入 Delta 内表(USTORE) │
 └─────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -173,8 +173,7 @@ ExecInsertT() [nodeModifyTable.cpp]
   │   ├─ NEW: isIcebergFDWFromTblOid(relid)?
   │   │   ├─ YES → LookupDeltaTableByForeignOid(relid)
   │   │   │   ├─ ValidOid → heap_open(deltaOid)
-  │   │   │   │             heap_form_tuple(deltaRel, ...)
-  │   │   │   │             heap_insert(deltaRel, tuple)
+  │   │   │   │             tableam_tslot_get_tuple_from_slot + tableam_tuple_insert
   │   │   │   │             icebergRouted = true
   │   │   │   └─ InvalidOid → 回退到 FDW 路径
   │   │   └─ NO → 走原有 FDW ExecForeignInsert 路径

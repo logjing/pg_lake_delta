@@ -128,7 +128,7 @@ SELECT create_delta_table('iceberg_foreign_table_name');
 
 -- 或分步操作：
 -- 1. 手动创建与外表同 schema 的普通表
-CREATE TABLE delta_xxx ( ... ) ;  -- schema 与外表一致
+CREATE TABLE delta_xxx ( ... ) WITH (storage_engine = ustore);  -- schema 与外表一致，使用 USTORE
 
 -- 2. 注册映射关系
 SELECT register_delta_mapping(
@@ -180,11 +180,11 @@ SELECT register_delta_mapping(
 
 2. **查找 Delta 表 OID**：新增 `LookupDeltaTableByForeignOid()` 函数，查询 `pg_delta_table` catalog，以 `foreign_relid` 为 key 获取 `delta_relid`。
 
-3. **切换插入目标**：将 `result_rel_info->ri_RelationDesc` 替换为 Delta 表的 Relation，清除 `ri_FdwRoutine`（使其变为 NULL），让代码走到后续的普通表 heap_insert 分支。
+3. **切换插入目标**：使用 `tableam_tslot_get_tuple_from_slot + tableam_tuple_insert` 将数据写入 Delta 内表（USTORE 格式），通过 tableam 抽象层自动路由到正确的存储引擎 API。
 
 4. **事务与锁**：Delta 表的打开/关闭需在当前事务上下文中完成，锁模式为 `RowExclusiveLock`。
 
-**更简洁的替代方案**：不替换 `ResultRelInfo` 的字段，而是在 FDW 分支内部直接调用 heap_insert 到 Delta 表：
+**更简洁的替代方案**：不替换 `ResultRelInfo` 的字段，而是在 FDW 分支内部通过 tableam 抽象层插入到 Delta 内表：
 
 ```cpp
 } else if (result_rel_info->ri_FdwRoutine) {
@@ -192,10 +192,11 @@ SELECT register_delta_mapping(
         Oid delta_oid = LookupDeltaTableByForeignOid(RelationGetRelid(result_relation_desc));
         if (OidIsValid(delta_oid)) {
             Relation delta_rel = heap_open(delta_oid, RowExclusiveLock);
-            // 直接走 heap_insert 到 Delta 表
-            heap_insert(delta_rel, tuple, GetCurrentCommandId(true), 0, NULL);
+            tableam_tslot_getallattrs(slot);
+            Tuple delta_tuple = tableam_tslot_get_tuple_from_slot(delta_rel, slot);
+            tableam_tuple_insert(delta_rel, delta_tuple, GetCurrentCommandId(true), 0, NULL);
             heap_close(delta_rel, RowExclusiveLock);
-            return slot;  // 返回原始 slot
+            return slot;
         }
     }
     // 原逻辑
