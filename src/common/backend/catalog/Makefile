@@ -26,7 +26,7 @@ OBJS = catalog.o dependency.o heap.o index.o indexing.o namespace.o aclchk.o \
        gs_matview.o pgxc_slice.o pg_job_proc.o gs_job_argument.o gs_job_attribute.o pg_uid.o gs_global_config.o\
        gs_db_privilege.o pg_publication.o pg_subscription.o gs_utf8_collation.o gs_collation.o gs_gbk_collation.o\
        gs_gb18030_collation.o pg_proc_ext.o query_imcstore_views.o pg_statistic_history.o pg_statistic_lock.o\
-	   query_parameterization_views.o
+	   query_parameterization_views.o pg_delta_table.o
 
 BKIFILES = postgres.bki postgres.description postgres.shdescription
 
@@ -51,7 +51,7 @@ POSTGRES_BKI_SRCS = $(addprefix $(top_srcdir)/src/include/catalog/,\
 	pg_ts_parser.h pg_ts_template.h pg_auth_history.h pg_user_status.h pg_extension.h \
 	pg_obsscaninfo.h pg_foreign_data_wrapper.h pg_foreign_server.h pg_user_mapping.h \
 	pgxc_class.h pgxc_node.h pgxc_group.h pg_resource_pool.h pg_workload_group.h \
-	pg_app_workloadgroup_mapping.h pg_foreign_table.h pg_rlspolicy.h \
+	pg_app_workloadgroup_mapping.h pg_foreign_table.h pg_delta_table.h pg_rlspolicy.h \
 	pg_default_acl.h pg_seclabel.h pg_shseclabel.h pg_collation.h pg_range.h gs_policy_label.h \
 	gs_auditing_policy.h gs_auditing_policy_acc.h gs_auditing_policy_priv.h gs_auditing_policy_filter.h \
 	gs_masking_policy.h gs_masking_policy_actions.h gs_masking_policy_filters.h \

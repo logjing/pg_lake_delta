@@ -100,6 +100,8 @@
 #include "gs_policy/gs_policy_masking.h"
 #include "optimizer/gplanmgr.h"
 #include "catalog/pg_constraint.h"
+#include "catalog/pg_delta_table.h"
+#include "foreign/foreign.h"
 
 /* Hooks for plugins to get control in ExecutorStart/Run/Finish/End */
 THR_LOCAL ExecutorStart_hook_type ExecutorStart_hook = NULL;
@@ -1722,11 +1724,20 @@ void CheckValidResultRel(Relation resultRel, CmdType operation)
             fdwroutine = GetFdwRoutineForRelation(resultRel, false);
             switch (operation) {
                 case CMD_INSERT:
-                    if (fdwroutine->ExecForeignInsert == NULL) {
+                    /*
+                     * 如果是 Iceberg 外表且有 Delta 表映射，跳过 FDW ExecForeignInsert 检查，
+                     * 因为 INSERT 将在 ExecInsertT 中被截流重定向到 Delta 内表。
+                     */
+                    if (isIcebergFDWFromTblOid(RelationGetRelid(resultRel)) &&
+                        OidIsValid(LookupDeltaTableByForeignOid(RelationGetRelid(resultRel)))) {
+                        /* Iceberg INSERT 截流：跳过本段 FDW 校验 */
+                    } else if (fdwroutine->ExecForeignInsert == NULL) {
                         ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
                             errmsg("cannot insert into foreign table \"%s\"", RelationGetRelationName(resultRel))));
                     }
                     if (fdwroutine->IsForeignRelUpdatable != NULL &&
+                        !(isIcebergFDWFromTblOid(RelationGetRelid(resultRel)) &&
+                          OidIsValid(LookupDeltaTableByForeignOid(RelationGetRelid(resultRel)))) &&
                         (fdwroutine->IsForeignRelUpdatable(resultRel) & (1 << CMD_INSERT)) == 0) {
                         ereport(ERROR, (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
                             errmsg("foreign table \"%s\" does not allow inserts", RelationGetRelationName(resultRel))));

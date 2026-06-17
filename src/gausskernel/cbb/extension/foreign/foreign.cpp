@@ -260,7 +260,7 @@ bool IsSpecifiedFDWFromRelid(Oid relId, const char* SepcifiedType)
  */
 bool CheckSupportedFDWType(Oid oid, bool byServerId)
 {
-    static const char* supportFDWType[] = {MOT_FDW, MYSQL_FDW, ORACLE_FDW, POSTGRES_FDW};
+    static const char* supportFDWType[] = {MOT_FDW, MYSQL_FDW, ORACLE_FDW, POSTGRES_FDW, ICEBERG_FDW};
     int size = sizeof(supportFDWType) / sizeof(supportFDWType[0]);
     bool support = false;
 
@@ -1057,6 +1057,8 @@ ServerTypeOption getServerType(Oid foreignTableId)
         srvType = T_TXT_CSV_OBS_SERVER;
     } else if (IsSpecifiedFDWFromRelid(foreignTableId, GC_FDW)) {
         srvType = T_PGFDW_SERVER;
+    } else if (IsSpecifiedFDWFromRelid(foreignTableId, ICEBERG_FDW)) {
+        srvType = T_ICEBERG_SERVER;
     }
 
     /* for in-place upgrade */

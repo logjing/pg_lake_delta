@@ -716,6 +716,12 @@ DECLARE_INDEX(pg_statistic_history_current_analyzetime_relid_index, 4888, on pg_
 DECLARE_INDEX(pg_statistic_lock_index, 4899, on pg_statistic_lock using btree(namespaceid oid_ops, stalocktype char_ops, relid oid_ops, partid oid_ops));
 #define StatisticLockIndexId 4899
 
+DECLARE_UNIQUE_INDEX(pg_delta_table_foreign_relid_index, 10007, on pg_delta_table using btree(foreign_relid oid_ops));
+#define DeltaTableForeignRelidIndexId 10007
+
+DECLARE_UNIQUE_INDEX(pg_delta_table_delta_relid_index, 10008, on pg_delta_table using btree(delta_relid oid_ops));
+#define DeltaTableDeltaRelidIndexId 10008
+
 /* last step of initialization script: build the indexes declared above */
 BUILD_INDICES
 

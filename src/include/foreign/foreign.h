@@ -146,7 +146,8 @@ typedef enum ServerTypeOption {
     T_DUMMY_SERVER,
     T_TXT_CSV_OBS_SERVER, /* mark the txt/csv foramt OBS foreign server. the fdw
                         is dist_fdw. */
-    T_PGFDW_SERVER
+    T_PGFDW_SERVER,
+    T_ICEBERG_SERVER      /* Iceberg foreign table */
 } ServerTypeOption;
 
 /*
@@ -436,6 +437,14 @@ extern void AdvanceFDWUpperPlan(FDWUpperRelCxt* ufdwCxt, UpperRelationKind stage
 #define IS_LOGFDW_FOREIGN_TABLE(relId) (OidIsValid(relId) && IsSpecifiedFDWFromRelid(relId, LOG_FDW))
 
 #define IS_POSTGRESFDW_FOREIGN_TABLE(relId) (OidIsValid(relId) && IsSpecifiedFDWFromRelid(relId, GC_FDW))
+
+/* 判断外表是否为 Iceberg FDW 类型：通过外表 OID 判断（执行层使用） */
+#define isIcebergFDWFromTblOid(relId) \
+    (OidIsValid(relId) && IsSpecifiedFDWFromRelid(relId, ICEBERG_FDW))
+
+/* 判断外表是否为 Iceberg FDW 类型：通过 server 名称判断（DDL 层使用） */
+#define isIcebergFDWFromSrvName(srvName) \
+    (IsSpecifiedFDW(srvName, ICEBERG_FDW))
 
 #define ENCRYPT_STR_PREFIX "encryptstr"
 #define MIN_ENCRYPTED_PASSWORD_LENGTH 54
